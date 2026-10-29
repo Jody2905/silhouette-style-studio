@@ -77,6 +77,14 @@ export function describeLook(outfit: Outfit, profile: Profile): string | null {
   if (has("outer")) lines.push(`Over it: ${garment(outfit.outer!)}, worn open.`);
   if (has("belt")) lines.push(`Belt: ${ITEM[outfit.belt!.id].name.toLowerCase()} in ${colourName(outfit.belt!.color)}.`);
   if (has("shoes")) lines.push(`Shoes: ${ITEM[outfit.shoes!.id].name.toLowerCase()} in ${colourName(outfit.shoes!.color)}.`);
+  if (has("bag")) {
+    const b = outfit.bag!;
+    const carry = { hand: "held in one hand", shoulder: "on the shoulder", crossbody: "worn crossbody", back: "worn on the back" }[ITEM[b.id].attrs.carry ?? "shoulder"];
+    lines.push(`Bag: ${garment(b).replace(/ \(.*\)$/, "")}, ${carry}.`);
+  }
+  if (has("necklace")) lines.push(`Necklace: ${ITEM[outfit.necklace!.id].name.toLowerCase()} in ${colourName(outfit.necklace!.color)}.`);
+  if (has("scarf")) lines.push(`Scarf: ${garment(outfit.scarf!).replace(/ \(.*\)$/, "")}${ITEM[outfit.scarf!.id].attrs.kind === "neckerchief" || ITEM[outfit.scarf!.id].attrs.kind === "bandana" ? ", tied at the neck" : ", draped around the neck"}.`);
+  if (has("wrist")) lines.push(`On the wrist: ${ITEM[outfit.wrist!.id].name.toLowerCase()} in ${colourName(outfit.wrist!.color)}.`);
   for (const s of ["earrings", "glasses", "hat"] as const) if (has(s)) lines.push(`${s[0].toUpperCase() + s.slice(1)}: ${ITEM[outfit[s]!.id].name.toLowerCase()} in ${colourName(outfit[s]!.color)}.`);
   if (has("hair")) {
     const h = outfit.hair!;

@@ -369,6 +369,220 @@ function paintFace(ctx: CanvasRenderingContext2D, scene: PhotoScene, outfit: Out
   }
 }
 
+/** Bags, necklaces, scarves and wrist pieces, placed from the pose and face landmarks. */
+function paintExtras(ctx: CanvasRenderingContext2D, scene: PhotoScene, outfit: Outfit) {
+  const p = scene.pose;
+  if (!p || p[11].v < 0.5 || p[12].v < 0.5) return;
+  // Image-left and image-right shoulders/elbows/wrists.
+  const [Ls, Rs] = p[11].x < p[12].x ? [p[11], p[12]] : [p[12], p[11]];
+  const [Le, Re] = p[11].x < p[12].x ? [p[13], p[14]] : [p[14], p[13]];
+  const [Lw, Rw] = p[11].x < p[12].x ? [p[15], p[16]] : [p[16], p[15]];
+  const [Lh, Rh] = p[23].x < p[24].x ? [p[23], p[24]] : [p[24], p[23]];
+  const S = Math.hypot(Rs.x - Ls.x, Rs.y - Ls.y) / 2;
+  const k = S / 60; // avatar units → pixels
+  const shMid = { x: (Ls.x + Rs.x) / 2, y: (Ls.y + Rs.y) / 2 };
+  const chin = scene.face?.[152] ?? { x: shMid.x, y: shMid.y - S * 0.7 };
+  const neckBase = { x: chin.x + (shMid.x - chin.x) * 0.8, y: chin.y + (shMid.y - chin.y) * 0.78 };
+  const shadow = (on: boolean) => {
+    ctx.shadowColor = on ? "rgba(0,0,0,0.35)" : "transparent";
+    ctx.shadowBlur = on ? 6 * k : 0;
+    ctx.shadowOffsetY = on ? 2 * k : 0;
+  };
+
+  const sc = outfit.scarf, scarf = sc && ITEM[sc.id];
+  if (sc && scarf) {
+    const kind = scarf.attrs.kind, nw = S * 0.34, ny = neckBase.y - 4 * k, cx = neckBase.x;
+    ctx.save();
+    shadow(true);
+    ctx.fillStyle = sc.pattern === "solid" ? sc.color : ctx.createPattern(patternTile(sc.color, sc.pattern), "repeat")!;
+    ctx.strokeStyle = shade(sc.color, -0.3);
+    ctx.lineWidth = 1.2 * k;
+    const path = new Path2D();
+    if (kind === "long" || kind === "blanket") {
+      const wide = kind === "blanket" ? 1.6 : 1.1;
+      path.moveTo(cx - nw * wide, ny - 6 * k);
+      path.quadraticCurveTo(cx, ny + 8 * k, cx + nw * wide, ny - 6 * k);
+      path.lineTo(cx + nw * wide * 1.15, ny + 16 * k);
+      path.quadraticCurveTo(cx, ny + 32 * k, cx - nw * wide * 1.15, ny + 16 * k);
+      path.closePath();
+      const hang = kind === "blanket" ? (Lh.y - shMid.y) * 0.55 : (Lh.y - shMid.y) * 0.95;
+      path.rect(cx - 16 * k, ny + 14 * k, 13 * k, hang);
+      path.rect(cx + 3 * k, ny + 14 * k, kind === "blanket" ? 26 * k : 13 * k, hang * 0.85);
+    } else if (kind === "bandana") {
+      path.moveTo(cx - nw, ny);
+      path.quadraticCurveTo(cx, ny + 8 * k, cx + nw, ny);
+      path.lineTo(cx, ny + 30 * k);
+      path.closePath();
+    } else {
+      path.moveTo(cx - nw, ny);
+      path.quadraticCurveTo(cx, ny + 9 * k, cx + nw, ny);
+      path.lineTo(cx + nw, ny + 9 * k);
+      path.quadraticCurveTo(cx, ny + 18 * k, cx - nw, ny + 9 * k);
+      path.closePath();
+      path.moveTo(cx + 3 * k, ny + 10 * k);
+      path.lineTo(cx + 17 * k, ny + 14 * k);
+      path.lineTo(cx + 11 * k, ny + 32 * k);
+      path.lineTo(cx + 1 * k, ny + 26 * k);
+      path.closePath();
+    }
+    ctx.fill(path);
+    shadow(false);
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
+  const nk = outfit.necklace, neck = nk && ITEM[nk.id];
+  if (nk && neck && !(scarf && scarf.attrs.kind !== "bandana")) {
+    const a = neck.attrs, c = nk.color, nx = S * 0.3, ny = neckBase.y, cx = neckBase.x;
+    const drop = (({ short: 16, medium: 36, long: 80 } as Record<string, number>)[a.length ?? "short"] ?? 16) * k;
+    const arc = (d: number) => {
+      const g = new Path2D();
+      g.moveTo(cx - nx, ny);
+      g.quadraticCurveTo(cx - nx * 0.6, ny + d * 1.15, cx, ny + d);
+      g.quadraticCurveTo(cx + nx * 0.6, ny + d * 1.15, cx + nx, ny);
+      return g;
+    };
+    ctx.save();
+    shadow(true);
+    ctx.strokeStyle = c;
+    ctx.fillStyle = c;
+    if (a.kind === "choker") {
+      ctx.lineWidth = 5 * k;
+      ctx.beginPath();
+      ctx.moveTo(cx - nx * 0.75, chin.y + (shMid.y - chin.y) * 0.45);
+      ctx.quadraticCurveTo(cx, chin.y + (shMid.y - chin.y) * 0.52, cx + nx * 0.75, chin.y + (shMid.y - chin.y) * 0.45);
+      ctx.stroke();
+    } else if (a.kind === "pearls") {
+      for (let i = 0; i <= 18; i++) {
+        const t = i / 18;
+        ctx.beginPath();
+        ctx.arc(cx - nx + 2 * nx * t, ny + drop * Math.sin(Math.PI * t) * 1.05, 2.4 * k, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (a.kind === "layered") {
+      [14, 28, 46].forEach((d, i) => {
+        ctx.lineWidth = (1.6 + i * 0.4) * k;
+        ctx.stroke(arc(d * k));
+      });
+    } else if (a.kind === "bib") {
+      const g = arc(6 * k);
+      g.quadraticCurveTo(cx + nx * 0.7, ny + 34 * k, cx, ny + 40 * k);
+      g.quadraticCurveTo(cx - nx * 0.7, ny + 34 * k, cx - nx, ny);
+      ctx.fill(g);
+    } else {
+      ctx.lineWidth = (neck.lines.includes("w") ? 1.8 : 3.4) * k;
+      ctx.stroke(arc(drop));
+      if (a.kind === "pendant") {
+        ctx.beginPath();
+        ctx.moveTo(cx, ny + drop - 1);
+        ctx.lineTo(cx - 5 * k, ny + drop + 7 * k);
+        ctx.lineTo(cx, ny + drop + 17 * k);
+        ctx.lineTo(cx + 5 * k, ny + drop + 7 * k);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  const wr = outfit.wrist, wrist = wr && ITEM[wr.id];
+  if (wr && wrist && Lw.v > 0.4) {
+    const len = Math.hypot(Lw.x - Le.x, Lw.y - Le.y) || 1;
+    const ux = (Lw.x - Le.x) / len, uy = (Lw.y - Le.y) / len;
+    const half = S * 0.14;
+    const band = (t: number, thick: number, col: string) => {
+      const px = Lw.x - ux * t * k, py = Lw.y - uy * t * k;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = thick * k;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(px - uy * half, py + ux * half);
+      ctx.lineTo(px + uy * half, py - ux * half);
+      ctx.stroke();
+    };
+    ctx.save();
+    shadow(true);
+    const kind = wrist.attrs.kind;
+    if (kind === "watch") {
+      band(6, 5, shade(wr.color, -0.2));
+      ctx.fillStyle = wr.color;
+      ctx.beginPath();
+      ctx.arc(Lw.x - ux * 6 * k, Lw.y - uy * 6 * k, half * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (kind === "bangles") [4, 9, 14].forEach((t) => band(t, 2.4, wr.color));
+    else if (kind === "cuff") band(8, 9, wr.color);
+    else [5, 10].forEach((t, i) => band(t, 3.2, i ? shade(wr.color, 0.3) : wr.color));
+    ctx.restore();
+  }
+
+  const bg = outfit.bag, bag = bg && ITEM[bg.id];
+  if (bg && bag) {
+    const a = bag.attrs, c = bg.color, dark = shade(c, -0.35);
+    const sz = { mini: 0.55, small: 0.75, medium: 1, large: 1.35 }[a.size ?? "medium"];
+    const bw = 58 * sz * k, bh = 44 * sz * k;
+    let bx: number, by: number;
+    const straps: [number, number, number, number][] = [];
+    if (a.carry === "hand") {
+      bx = Rw.x - bw / 2;
+      by = a.kind === "clutch" ? Rw.y - bh * 0.35 : Rw.y + 8 * k;
+    } else if (a.carry === "crossbody") {
+      bx = Rh.x + S * 0.35 - bw * 0.3;
+      by = Rh.y - bh * 0.5;
+      straps.push([Ls.x + S * 0.2, Ls.y - 2 * k, bx + bw * 0.7, by]);
+    } else if (a.carry === "back") {
+      bx = by = 0;
+      straps.push([Ls.x + S * 0.3, Ls.y - 4 * k, Lh.x + S * 0.05, (Ls.y + Lh.y) / 2 + S * 0.3], [Rs.x - S * 0.3, Rs.y - 4 * k, Rh.x - S * 0.05, (Rs.y + Rh.y) / 2 + S * 0.3]);
+    } else {
+      bx = Re.x + S * 0.08;
+      by = a.size === "large" ? (Re.y + Rh.y) / 2 : Re.y - bh * 0.5;
+      straps.push([Rs.x - S * 0.08, Rs.y - 2 * k, bx + bw * 0.3, by], [Rs.x - S * 0.02, Rs.y - 2 * k, bx + bw * 0.7, by]);
+    }
+    ctx.save();
+    shadow(true);
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = (a.carry === "back" ? 6 : 2.6) * k;
+    ctx.lineCap = "round";
+    for (const [x1, y1, x2, y2] of straps) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+    if (a.carry !== "back") {
+      if (a.carry === "hand" && a.kind !== "clutch") {
+        ctx.beginPath();
+        ctx.moveTo(bx + bw * 0.28, by);
+        ctx.quadraticCurveTo(bx + bw / 2, by - bh * 0.7, bx + bw * 0.72, by);
+        ctx.stroke();
+      }
+      const body = new Path2D();
+      if (a.kind === "tote") {
+        body.moveTo(bx, by); body.lineTo(bx + bw, by); body.lineTo(bx + bw + 5 * k, by + bh); body.lineTo(bx - 5 * k, by + bh); body.closePath();
+      } else if (a.kind === "hobo") {
+        body.moveTo(bx, by); body.quadraticCurveTo(bx + bw / 2, by + 8 * k, bx + bw, by);
+        body.quadraticCurveTo(bx + bw + 6 * k, by + bh * 0.9, bx + bw / 2, by + bh); body.quadraticCurveTo(bx - 6 * k, by + bh * 0.9, bx, by);
+      } else body.roundRect(bx, by, bw, a.kind === "baguette" ? bh * 0.55 : bh, 4 * k);
+      const grad = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
+      grad.addColorStop(0, shade(c, 0.15));
+      grad.addColorStop(1, shade(c, -0.15));
+      ctx.fillStyle = grad;
+      ctx.fill(body);
+      shadow(false);
+      ctx.lineWidth = 1.3 * k;
+      ctx.stroke(body);
+      if (["crossbody", "messenger", "clutch", "top-handle"].includes(a.kind ?? "")) {
+        ctx.fillStyle = shade(c, -0.12);
+        ctx.beginPath();
+        ctx.moveTo(bx, by + 2 * k); ctx.lineTo(bx + bw, by + 2 * k); ctx.lineTo(bx + bw, by + bh * 0.45);
+        ctx.quadraticCurveTo(bx + bw / 2, by + bh * 0.6, bx, by + bh * 0.45); ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Component                                                            */
 /* ------------------------------------------------------------------ */
@@ -401,6 +615,7 @@ export function PhotoTryOn({ scene, profile, outfit }: { scene: PhotoScene; prof
         paintMask(ctx, scene, map, l.mask, worn.color, isShoe ? "solid" : worn.pattern, l.sheer ? 0.55 : 1, isShoe ? 0.18 : 0.28);
       }
     }
+    paintExtras(ctx, scene, outfit);
     paintFace(ctx, scene, outfit);
   }, [scene, map, outfit, profile.hairColor, profile.skinHex, compare]);
 

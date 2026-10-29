@@ -149,3 +149,27 @@ describe("describeLook (AI try-on prompt)", () => {
     expect(describeLook({}, DEFAULT_PROFILE)).toBeNull();
   });
 });
+
+describe("bags and accessories", () => {
+  it("scales bags to height and matches necklaces to necklines", async () => {
+    const { scoreLook, wear, DEFAULT_PROFILE, ProfileSchema, describeLook, styleMe } = await import("../src/index");
+    const petite = ProfileSchema.parse({ ...DEFAULT_PROFILE, heightCm: 152 });
+    const base = { top: wear("top-v-tee"), bottom: wear("bottom-straight-jeans"), shoes: wear("shoes-sneakers") };
+    const big = scoreLook(petite, { ...base, bag: wear("bag-tote") });
+    const small = scoreLook(petite, { ...base, bag: wear("bag-baguette") });
+    expect(big.tryThis.some((n) => /overwhelm/.test(n.text))).toBe(true);
+    expect(small.score).toBeGreaterThan(big.score);
+    const pendant = scoreLook(DEFAULT_PROFILE, { ...base, necklace: wear("neck-pendant") });
+    expect(pendant.works.some((n) => /follows your neckline/.test(n.text))).toBe(true);
+    const choker = scoreLook(DEFAULT_PROFILE, { ...base, top: wear("top-turtleneck"), necklace: wear("neck-choker") });
+    expect(choker.tryThis.some((n) => /clashes with a high/.test(n.text))).toBe(true);
+    const busy = scoreLook(DEFAULT_PROFILE, { ...base, necklace: wear("neck-statement"), earrings: wear("ear-drops"), scarf: wear("scarf-blanket") });
+    expect(busy.tryThis.some((n) => /one focal point/.test(n.text))).toBe(true);
+    const prompt = describeLook({ ...base, bag: wear("bag-crossbody"), necklace: wear("neck-pearls"), wrist: wear("wrist-watch") }, DEFAULT_PROFILE)!;
+    expect(prompt).toMatch(/Bag: a mini crossbody in .*, worn crossbody\./);
+    expect(prompt).toMatch(/Necklace: pearl strand/);
+    expect(prompt).toMatch(/On the wrist: classic watch in silver/);
+    // Style me still builds complete looks with the new slots available.
+    expect(scoreLook(DEFAULT_PROFILE, styleMe(DEFAULT_PROFILE, { seed: 1 })).missing).toEqual([]);
+  });
+});

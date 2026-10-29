@@ -1,6 +1,6 @@
 import type { FaceShape, Vibe } from "./types";
 
-export const SLOTS = ["hair", "top", "bottom", "dress", "outer", "shoes", "belt", "earrings", "glasses", "hat", "lips", "eyes", "blush", "beard"] as const;
+export const SLOTS = ["hair", "top", "bottom", "dress", "outer", "shoes", "bag", "belt", "necklace", "earrings", "scarf", "wrist", "glasses", "hat", "lips", "eyes", "blush", "beard"] as const;
 export type Slot = (typeof SLOTS)[number];
 
 export const SLOT_LABEL: Record<Slot, string> = {
@@ -10,8 +10,12 @@ export const SLOT_LABEL: Record<Slot, string> = {
   dress: "Dresses & jumpsuits",
   outer: "Outerwear",
   shoes: "Shoes",
+  bag: "Bags",
   belt: "Belts",
+  necklace: "Necklaces",
   earrings: "Earrings",
+  scarf: "Scarves",
+  wrist: "Watches & bracelets",
   glasses: "Glasses",
   hat: "Hats",
   lips: "Lips",
@@ -68,6 +72,11 @@ export interface Item {
     volume?: "top" | "sides" | "even";
     fringe?: boolean;
     makeup?: "natural" | "bold";
+    /** Bags: overall size, and where the strap makes it sit. */
+    size?: "mini" | "small" | "medium" | "large";
+    carry?: "hand" | "shoulder" | "crossbody" | "back";
+    /** Jewellery: a statement piece draws the eye. */
+    statement?: boolean;
   };
 }
 
@@ -175,6 +184,39 @@ export const CATALOG: Item[] = [
   { id: "hat-fedora", slot: "hat", name: "Wide-brim fedora", lines: U, color: "#4a2f23", vibes: ["boho", "classic"], attrs: { kind: "fedora" } },
   { id: "hat-trapper", slot: "hat", name: "Faux-fur trapper hat", lines: U, color: "#d8b892", vibes: ["edgy", "glam"], trends: ["oversized-outerwear"], attrs: { kind: "trapper" } },
   { id: "hat-cap", slot: "hat", name: "Baseball cap", lines: U, color: "#1b2a4a", vibes: ["sporty", "streetwear"], attrs: { kind: "cap" } },
+
+  /* ---------------- bags ---------------- */
+  { id: "bag-tote", slot: "bag", name: "Leather tote", lines: U, color: "#c19a6b", vibes: ["classic", "minimal"], attrs: { kind: "tote", size: "large", carry: "shoulder", structure: "soft" } },
+  { id: "bag-top-handle", slot: "bag", name: "Structured top-handle bag", lines: W, color: "#6b1c2a", vibes: ["classic", "preppy", "glam"], trends: ["preppy"], attrs: { kind: "top-handle", size: "medium", carry: "hand", structure: "structured" } },
+  { id: "bag-baguette", slot: "bag", name: "Shoulder baguette", lines: W, color: "#111111", vibes: ["glam", "minimal", "edgy"], trends: ["roaring-twenties"], attrs: { kind: "baguette", size: "small", carry: "shoulder", structure: "structured" } },
+  { id: "bag-crossbody", slot: "bag", name: "Mini crossbody", lines: U, color: "#2a1d16", vibes: ["streetwear", "minimal", "sporty"], attrs: { kind: "crossbody", size: "mini", carry: "crossbody", structure: "structured" } },
+  { id: "bag-hobo", slot: "bag", name: "Slouchy hobo bag", lines: W, color: "#8a6040", vibes: ["boho", "romantic"], trends: ["boho-revival"], attrs: { kind: "hobo", size: "large", carry: "shoulder", structure: "soft" } },
+  { id: "bag-clutch", slot: "bag", name: "Evening clutch", lines: W, color: "#d4af37", vibes: ["glam"], trends: ["fully-loaded"], attrs: { kind: "clutch", size: "small", carry: "hand", structure: "structured" } },
+  { id: "bag-backpack", slot: "bag", name: "Minimal backpack", lines: U, color: "#111111", vibes: ["sporty", "streetwear", "minimal"], attrs: { kind: "backpack", size: "medium", carry: "back", structure: "soft" } },
+  { id: "bag-messenger", slot: "bag", name: "Leather messenger bag", lines: M, color: "#4a2f23", vibes: ["classic", "preppy"], attrs: { kind: "messenger", size: "medium", carry: "crossbody", structure: "structured" } },
+  { id: "bag-bucket", slot: "bag", name: "Drawstring bucket bag", lines: W, color: "#a3b49a", vibes: ["boho", "minimal"], attrs: { kind: "bucket", size: "medium", carry: "shoulder", structure: "soft" } },
+
+  /* ---------------- necklaces ---------------- */
+  { id: "neck-pendant", slot: "necklace", name: "Long pendant", lines: W, color: "#d4af37", vibes: ["boho", "minimal", "classic"], attrs: { kind: "pendant", length: "long", goodFor: ["round", "square", "heart", "oval"], carefulWith: ["oblong"] } },
+  { id: "neck-fine-chain", slot: "necklace", name: "Fine short chain", lines: U, color: "#d4af37", vibes: ["minimal", "classic", "streetwear"], attrs: { kind: "chain", length: "short", goodFor: ["oblong", "diamond", "triangle", "oval", "heart"] } },
+  { id: "neck-choker", slot: "necklace", name: "Choker", lines: W, color: "#111111", vibes: ["edgy", "glam"], attrs: { kind: "choker", length: "short", goodFor: ["oblong", "diamond", "oval"], carefulWith: ["round", "square"] } },
+  { id: "neck-pearls", slot: "necklace", name: "Pearl strand", lines: W, color: "#f2efe6", vibes: ["classic", "romantic", "preppy"], trends: ["roaring-twenties"], attrs: { kind: "pearls", length: "medium", goodFor: ["oval", "heart", "oblong", "diamond", "triangle"] } },
+  { id: "neck-layered", slot: "necklace", name: "Layered chains", lines: W, color: "#d4af37", vibes: ["boho", "glam", "streetwear"], trends: ["fully-loaded"], attrs: { kind: "layered", length: "medium", statement: true, goodFor: ["round", "square", "oval", "heart"] } },
+  { id: "neck-statement", slot: "necklace", name: "Statement bib necklace", lines: W, color: "#d4af37", vibes: ["glam", "edgy"], trends: ["fully-loaded"], attrs: { kind: "bib", length: "short", statement: true, goodFor: ["oblong", "heart", "triangle", "oval"], carefulWith: ["round"] } },
+  { id: "neck-cuban", slot: "necklace", name: "Curb chain", lines: M, color: "#c0c0c0", vibes: ["streetwear", "edgy"], attrs: { kind: "chain", length: "short", goodFor: ["oblong", "diamond", "oval", "triangle"] } },
+
+  /* ---------------- scarves ---------------- */
+  { id: "scarf-silk", slot: "scarf", name: "Silk neck scarf", lines: W, color: "#b6406a", patternable: true, vibes: ["classic", "preppy", "romantic"], trends: ["preppy"], attrs: { kind: "neckerchief", length: "short" } },
+  { id: "scarf-long", slot: "scarf", name: "Long knit scarf", lines: U, color: "#9c8f88", patternable: true, vibes: ["minimal", "classic", "streetwear"], attrs: { kind: "long", length: "long" } },
+  { id: "scarf-blanket", slot: "scarf", name: "Chunky blanket scarf", lines: U, color: "#6b1c2a", patternable: true, vibes: ["boho", "streetwear"], trends: ["checks"], attrs: { kind: "blanket", length: "medium" } },
+  { id: "scarf-bandana", slot: "scarf", name: "Bandana", lines: U, color: "#c8102e", patternable: true, vibes: ["boho", "edgy", "streetwear"], attrs: { kind: "bandana", length: "short" } },
+
+  /* ---------------- watches & bracelets ---------------- */
+  { id: "wrist-watch", slot: "wrist", name: "Classic watch", lines: U, color: "#c0c0c0", vibes: ["classic", "minimal", "preppy"], attrs: { kind: "watch" } },
+  { id: "wrist-sport-watch", slot: "wrist", name: "Sport watch", lines: U, color: "#111111", vibes: ["sporty", "streetwear"], attrs: { kind: "watch" } },
+  { id: "wrist-bangles", slot: "wrist", name: "Stacked bangles", lines: W, color: "#d4af37", vibes: ["boho", "glam"], trends: ["fully-loaded"], attrs: { kind: "bangles", statement: true } },
+  { id: "wrist-cuff", slot: "wrist", name: "Sculptural cuff", lines: W, color: "#d4af37", vibes: ["glam", "edgy", "minimal"], attrs: { kind: "cuff", statement: true } },
+  { id: "wrist-beaded", slot: "wrist", name: "Beaded bracelets", lines: U, color: "#8a6040", vibes: ["boho", "streetwear"], trends: ["boho-revival"], attrs: { kind: "beads" } },
 
   /* ---------------- makeup & grooming ---------------- */
   { id: "lips-sheer", slot: "lips", name: "Tinted balm", lines: U, color: "#c98a7a", vibes: ["minimal", "sporty", "classic"], attrs: { makeup: "natural" } },

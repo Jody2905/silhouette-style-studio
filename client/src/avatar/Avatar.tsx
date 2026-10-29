@@ -389,6 +389,123 @@ export function Avatar({ profile, outfit, faceImg, title }: { profile: Profile; 
   if (legs) layers.unshift(...shoeLayer);
   else layers.push(...shoeLayer);
 
+  /* bag, necklace, scarf, wrist */
+  const armRight = armLine(F, 1), armLeft = armLine(F, -1);
+  const [wrX, wrY] = armRight.pts[2];
+  const bagItem = item("bag");
+  if (bagItem && outfit.bag) {
+    const c = outfit.bag.color, dark = shade(c, -0.35), a = bagItem.attrs;
+    const sz = { mini: 0.55, small: 0.75, medium: 1, large: 1.35 }[a.size ?? "medium"];
+    const bw = 58 * sz, bh = 44 * sz;
+    const shoulder: Pt = [cx + w.shoulder - 10, y.shoulder + 6];
+    const oppShoulder: Pt = [cx - w.shoulder + 14, y.shoulder + 4];
+    // Where the bag body sits.
+    let bx: number, by: number;
+    const strap: string[] = [];
+    if (a.carry === "hand") {
+      bx = wrX - bw / 2 + 6;
+      by = wrY + 10;
+      strap.push(a.kind === "clutch" ? "" : `M${bx + bw * 0.25},${by} Q${bx + bw / 2},${by - bh * 0.7} ${bx + bw * 0.75},${by}`);
+      if (a.kind === "clutch") by = wrY - bh * 0.3;
+    } else if (a.carry === "crossbody") {
+      bx = cx + bodyHalf(F, y.hip) - bw * 0.35;
+      by = y.hip - bh * 0.4;
+      strap.push(`M${oppShoulder[0]},${oppShoulder[1]} L${bx + bw * 0.7},${by + 2}`);
+    } else if (a.carry === "back") {
+      bx = 0;
+      by = 0;
+      for (const s of [-1, 1]) strap.push(`M${cx + s * (w.shoulder - 22)},${y.shoulder - 2} Q${cx + s * (w.shoulder - 14)},${y.bust} ${cx + s * (bodyHalf(F, y.waist) - 4)},${y.waist + 10}`);
+    } else {
+      bx = cx + Math.max(bodyHalf(F, y.waist) + 6, bodyHalf(F, y.waist + (a.size === "large" ? 40 : 10)) + 4);
+      by = (a.size === "large" ? y.waist + 8 : y.waist - bh * 0.6);
+      strap.push(`M${shoulder[0]},${shoulder[1]} L${bx + bw * 0.3},${by + 1}`, `M${shoulder[0] + 4},${shoulder[1]} L${bx + bw * 0.7},${by + 1}`);
+    }
+    const body = (() => {
+      switch (a.kind) {
+        case "tote": return `M${bx},${by} L${bx + bw},${by} L${bx + bw + 5},${by + bh} L${bx - 5},${by + bh} Z`;
+        case "hobo": return `M${bx},${by} Q${bx + bw / 2},${by + 8} ${bx + bw},${by} Q${bx + bw + 6},${by + bh * 0.9} ${bx + bw / 2},${by + bh} Q${bx - 6},${by + bh * 0.9} ${bx},${by} Z`;
+        case "baguette": return `M${bx},${by + 3} Q${bx},${by} ${bx + 4},${by} L${bx + bw - 4},${by} Q${bx + bw},${by} ${bx + bw},${by + 3} L${bx + bw},${by + bh * 0.55} L${bx},${by + bh * 0.55} Z`;
+        case "bucket": return `M${bx + 3},${by} L${bx + bw - 3},${by} L${bx + bw},${by + bh} Q${bx + bw / 2},${by + bh + 5} ${bx},${by + bh} Z`;
+        default: return `M${bx},${by + 3} Q${bx},${by} ${bx + 3},${by} L${bx + bw - 3},${by} Q${bx + bw},${by} ${bx + bw},${by + 3} L${bx + bw},${by + bh} L${bx},${by + bh} Z`;
+      }
+    })();
+    layers.push(
+      <g key="bag">
+        {strap.filter(Boolean).map((d, i) => <path key={i} d={d} fill="none" stroke={dark} strokeWidth={a.carry === "back" ? 5 : 2.4} strokeLinecap="round" />)}
+        {a.carry !== "back" && <path d={body} fill={c} stroke={dark} strokeWidth="1.3" />}
+        {(a.kind === "crossbody" || a.kind === "messenger" || a.kind === "clutch" || a.kind === "top-handle") && a.carry !== "back" && (
+          <path d={`M${bx},${by + 2} L${bx + bw},${by + 2} L${bx + bw},${by + bh * 0.45} Q${bx + bw / 2},${by + bh * 0.6} ${bx},${by + bh * 0.45} Z`} fill={shade(c, -0.12)} stroke={dark} strokeWidth="1" />
+        )}
+        {a.kind === "bucket" && <path d={`M${bx + 4},${by + 4} Q${bx + bw / 2},${by + 9} ${bx + bw - 4},${by + 4}`} fill="none" stroke={dark} strokeWidth="1.4" />}
+      </g>,
+    );
+  }
+
+  const neckItem = item("necklace");
+  if (neckItem && outfit.necklace) {
+    const c = outfit.necklace.color, a = neckItem.attrs;
+    const nx = w.neck * 0.95, ny = y.neck + (y.shoulder - y.neck) * 0.75;
+    const drop = ({ short: 18, medium: 36, long: 80 } as Record<string, number>)[a.length ?? "short"] ?? 18;
+    const arc = (d: number) => `M${cx - nx},${ny} Q${cx - nx * 0.6},${ny + d * 1.15} ${cx},${ny + d} Q${cx + nx * 0.6},${ny + d * 1.15} ${cx + nx},${ny}`;
+    const els: JSX.Element[] = [];
+    if (a.kind === "choker") els.push(<rect key="ch" x={cx - w.neck * 0.92} y={y.neck + (y.shoulder - y.neck) * 0.3} width={w.neck * 1.84} height="6" rx="3" fill={c} />);
+    else if (a.kind === "pearls") {
+      for (let i = 0; i <= 16; i++) {
+        const t = i / 16, x = cx - nx + 2 * nx * t, yy = ny + drop * Math.sin(Math.PI * t) * 1.05;
+        els.push(<circle key={i} cx={x} cy={yy} r="2.4" fill={c} stroke={shade(c, -0.25)} strokeWidth="0.5" />);
+      }
+    } else if (a.kind === "layered") [14, 28, 46].forEach((d, i) => els.push(<path key={i} d={arc(d)} fill="none" stroke={c} strokeWidth={1.8 + i * 0.4} />));
+    else if (a.kind === "bib") els.push(<path key="bib" d={`${arc(6)} Q${cx + nx * 0.7},${ny + 34} ${cx},${ny + 40} Q${cx - nx * 0.7},${ny + 34} ${cx - nx},${ny} Z`} fill={c} stroke={shade(c, -0.3)} strokeWidth="1" />);
+    else {
+      els.push(<path key="chain" d={arc(drop)} fill="none" stroke={c} strokeWidth={a.kind === "chain" && neckItem.lines.includes("m") && !neckItem.lines.includes("w") ? 3.6 : 2.2} />);
+      if (a.kind === "pendant") els.push(<path key="p" d={`M${cx},${ny + drop - 1} l-5,7 l5,10 l5,-10 Z`} fill={c} stroke={shade(c, -0.3)} strokeWidth="0.8" />);
+    }
+    layers.push(<g key="necklace">{els}</g>);
+  }
+
+  const scarfItem = item("scarf");
+  if (scarfItem && outfit.scarf) {
+    const f = fill("scarf"), ln = line("scarf"), k = scarfItem.attrs.kind;
+    const nw = w.neck + 6, ny = y.neck + 2, sy = y.shoulder + 4;
+    const wrap = `M${cx - nw - 4},${ny - 2} Q${cx},${ny + 10} ${cx + nw + 4},${ny - 2} L${cx + nw + 8},${sy} Q${cx},${sy + 16} ${cx - nw - 8},${sy} Z`;
+    const els: JSX.Element[] = [];
+    if (k === "long") {
+      els.push(<path key="w" d={wrap} />);
+      els.push(<path key="l" d={`M${cx - 14},${sy + 4} L${cx - 2},${sy + 4} L${cx - 4},${y.waist + 30} L${cx - 18},${y.waist + 28} Z`} />);
+      els.push(<path key="r" d={`M${cx + 4},${sy + 4} L${cx + 16},${sy + 4} L${cx + 20},${y.waist + 14} L${cx + 6},${y.waist + 16} Z`} />);
+    } else if (k === "blanket") {
+      els.push(<path key="w" d={`M${cx - nw - 12},${ny - 6} Q${cx},${ny + 6} ${cx + nw + 12},${ny - 6} L${cx + w.shoulder - 6},${sy + 10} Q${cx},${sy + 36} ${cx - w.shoulder + 6},${sy + 10} Z`} />);
+      els.push(<path key="f" d={`M${cx - 4},${sy + 12} L${cx + 26},${sy + 10} L${cx + 30},${y.bust + 40} L${cx + 2},${y.bust + 44} Z`} />);
+    } else if (k === "bandana") {
+      els.push(<path key="b" d={`M${cx - nw - 2},${ny} Q${cx},${ny + 8} ${cx + nw + 2},${ny} L${cx},${sy + 26} Z`} />);
+    } else {
+      els.push(<path key="w" d={`M${cx - nw},${ny} Q${cx},${ny + 9} ${cx + nw},${ny} L${cx + nw + 2},${ny + 9} Q${cx},${ny + 18} ${cx - nw - 2},${ny + 9} Z`} />);
+      els.push(<path key="k" d={`M${cx + 4},${ny + 10} l14,4 l-6,18 l-10,-6 Z M${cx + 2},${ny + 10} l-12,6 l2,16 l8,-8 Z`} />);
+    }
+    layers.push(<g key="scarf" fill={f} stroke={ln} strokeWidth="1.1">{els}</g>);
+  }
+
+  const wristItem = item("wrist");
+  if (wristItem && outfit.wrist) {
+    const c = outfit.wrist.color, k = wristItem.attrs.kind;
+    const [ex, ey] = armLeft.pts[1], [wx, wy] = armLeft.pts[2];
+    const len = Math.hypot(wx - ex, wy - ey) || 1;
+    const ux = (wx - ex) / len, uy = (wy - ey) / len; // along the forearm
+    const half = (armLeft.widths[2] ?? 7) + 2.5;
+    const band = (t: number, thick: number, col: string, key: string) => {
+      const px = wx - ux * t, py = wy - uy * t;
+      return <line key={key} x1={px - uy * half} y1={py + ux * half} x2={px + uy * half} y2={py - ux * half} stroke={col} strokeWidth={thick} strokeLinecap="round" />;
+    };
+    const els: JSX.Element[] = [];
+    if (k === "watch") {
+      els.push(band(6, 5, shade(c, -0.2), "s"));
+      els.push(<circle key="f" cx={wx - ux * 6} cy={wy - uy * 6} r={half * 0.75} fill={c} stroke={shade(c, -0.4)} strokeWidth="1" />);
+    } else if (k === "bangles") [4, 9, 14].forEach((t, i) => els.push(band(t, 2.6, c, `b${i}`)));
+    else if (k === "cuff") els.push(band(8, 9, c, "c"));
+    else for (let i = 0; i < 2; i++) els.push(<g key={`bd${i}`}>{Array.from({ length: 5 }, (_, j) => { const t = 5 + i * 5, px = wx - ux * t, py = wy - uy * t, f = (j - 2) / 2; return <circle key={j} cx={px + uy * half * f} cy={py - ux * half * f} r="2.4" fill={i ? shade(c, 0.3) : c} />; })}</g>);
+    layers.push(<g key="wrist">{els}</g>);
+  }
+
   /* accessories on the head */
   const cy = y.headCy;
   const rx = F.headRx, ry = F.headRy;

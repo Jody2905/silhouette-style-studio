@@ -6,6 +6,9 @@ import { scoreLook } from "./scoring";
 import { TRENDS, type Trend } from "./trends";
 import { HAIR_HEX, type FaceShape, type Profile, type Tip } from "./types";
 
+const HIP_SHAPES: BodyShape[] = ["triangle", "bottom-hourglass", "spoon"];
+const TOP_SHAPES: BodyShape[] = ["inverted-triangle", "top-hourglass"];
+
 const BODY_TIPS: Record<BodyShape, { wear: string[]; careful: string[] }> = {
   hourglass: {
     wear: ["Wrap dresses and wrap tops", "Belts at the natural waist", "High-rise trousers with tucked-in tops", "Fitted knits and tailored blazers that nip in"],
@@ -75,6 +78,7 @@ export interface StyleGuide {
   color: ColorResult;
   proportion: Tip[];
   makeup: Tip[];
+  accessories: Tip[];
   trends: { trend: Trend; fit: "easy" | "adapt" }[];
   shopping: string[];
 }
@@ -117,6 +121,22 @@ export function buildGuide(p: Profile): StyleGuide {
             { text: "Choose brown mascara and liner over jet black.", evidence: "stylist" },
           ];
 
+  const metalsWarm = /gold|bronze|copper|brass/i.test(color.palette.metals.split(",")[0]);
+  const accessories: Tip[] = [
+    { text: `Best metals: ${color.palette.metals}. ${metalsWarm ? "Warm gold tones echo your colouring." : "Cool silver tones echo your colouring."}`, evidence: "stylist" },
+    body.heightClass === "petite"
+      ? { text: "Keep bags small to medium and jewellery fine, so accessories stay in proportion with your frame.", evidence: "stylist" }
+      : body.heightClass === "tall"
+        ? { text: "You can carry larger totes and bolder jewellery; tiny pieces can look lost on you.", evidence: "stylist" }
+        : { text: "Medium bags and mid-weight jewellery are in proportion with your frame.", evidence: "stylist" },
+  ];
+  if (HIP_SHAPES.includes(body.shape)) accessories.push({ text: "Carry bags on a short strap at the waist, not at the hips, and use necklaces and scarves to draw the eye up.", evidence: "stylist" });
+  if (TOP_SHAPES.includes(body.shape)) accessories.push({ text: "Crossbody or hand-held bags add interest lower down; skip chunky scarves and bib necklaces that widen the shoulders.", evidence: "stylist" });
+  if (face === "round" || face === "square") accessories.push({ text: "Long pendants and V-shaped necklaces lengthen your face; avoid tight chokers.", evidence: "stylist" });
+  if (face === "oblong" || face === "diamond") accessories.push({ text: "Short chains, chokers and pearls at the collarbone add width and balance a longer face.", evidence: "stylist" });
+  accessories.push({ text: "Match the necklace to the neckline: pendants for V and scoop necks, short chains for crew and boat necks, long pendants over turtlenecks.", evidence: "stylist" });
+  accessories.push({ text: "Pick one statement piece near the face: a bold necklace, drop earrings or a big scarf, not all three.", evidence: "stylist" });
+
   const trends = TRENDS.map((t) => ({ trend: t, fit: (!t.easyFor || t.easyFor.includes(body.shape) ? "easy" : "adapt") as "easy" | "adapt" }))
     .sort((a, b) => {
       const v = (t: Trend) => t.vibes.filter((x) => p.vibes.includes(x)).length;
@@ -151,6 +171,7 @@ export function buildGuide(p: Profile): StyleGuide {
     color,
     proportion,
     makeup,
+    accessories,
     trends,
     shopping,
   };
@@ -170,8 +191,8 @@ export function styleMe(p: Profile, opts: { seed?: number; base?: Outfit; trend?
   let outfit: Outfit = Object.fromEntries(Object.entries(trend?.starter ?? opts.base ?? {}).filter(([, w]) => w && allowed.has(w.id)));
   const useDress = !outfit.top && !outfit.bottom && (outfit.dress || (p.wardrobe !== "menswear" && seed % 3 === 2));
   const order: Slot[] = useDress
-    ? ["dress", "shoes", "outer", "hair", "earrings", "lips", "eyes"]
-    : ["top", "bottom", "shoes", "outer", "hair", "belt", "earrings", "lips", "beard"];
+    ? ["dress", "shoes", "outer", "hair", "bag", "necklace", "earrings", "lips", "eyes"]
+    : ["top", "bottom", "shoes", "outer", "hair", "belt", "bag", "necklace", "earrings", "wrist", "lips", "beard"];
   for (const slot of order) {
     if (outfit[slot]) continue;
     if (slot === "beard" && p.wardrobe !== "menswear") continue;
@@ -180,7 +201,7 @@ export function styleMe(p: Profile, opts: { seed?: number; base?: Outfit; trend?
     const colors = (i: Item) =>
       slot === "hair" || slot === "beard" ? [HAIR_HEX[p.hairColor]] : ["top", "dress", "outer"].includes(slot) ? [i.color, ...palette.best.slice(0, 4).map((c) => c.hex), ...palette.neutrals.slice(0, 2).map((c) => c.hex)] : [i.color];
     const baseScore = scoreLook(p, outfit).score;
-    const optional = ["outer", "belt", "earrings", "eyes", "beard"].includes(slot);
+    const optional = ["outer", "belt", "bag", "necklace", "earrings", "wrist", "eyes", "beard"].includes(slot);
     const tried: { s: number; o: Outfit }[] = [];
     for (const item of options)
       for (const c of colors(item)) {

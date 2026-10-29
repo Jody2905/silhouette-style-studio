@@ -48,9 +48,9 @@ export function scoreLook(profile: Profile, outfit: Outfit): LookScore {
   const face = faceShapeOf(profile).shape;
   const notes: Note[] = [];
   // Each category can only add so many points, so a great look has to get several things right.
-  const CAPS = { body: 14, proportion: 10, pattern: 4, face: 10, colour: 10, makeup: 6, vibe: 6, trend: 4 };
+  const CAPS = { body: 14, proportion: 10, pattern: 4, face: 10, colour: 10, makeup: 6, accessories: 8, vibe: 6, trend: 4 };
   type Cat = keyof typeof CAPS;
-  const used: Record<Cat, number> = { body: 0, proportion: 0, pattern: 0, face: 0, colour: 0, makeup: 0, vibe: 0, trend: 0 };
+  const used: Record<Cat, number> = { body: 0, proportion: 0, pattern: 0, face: 0, colour: 0, makeup: 0, accessories: 0, vibe: 0, trend: 0 };
   let cat: Cat = "body";
   const add = (points: number, text: string, evidence: Evidence = "stylist", source?: string) => {
     let pts = points;
@@ -152,7 +152,7 @@ export function scoreLook(profile: Profile, outfit: Outfit): LookScore {
       if (rule.good.includes(neckline) && face !== "oval") add(3, `This neckline flatters a ${face} face.`);
       if (rule.careful.includes(neckline)) add(-3, `This neckline echoes the shape of a ${face} face. Try a ${rule.good.slice(0, 2).join(" or ")} neckline.`);
     }
-    for (const s of ["hair", "glasses", "earrings", "beard"] as Slot[]) {
+    for (const s of ["hair", "glasses", "earrings", "necklace", "beard"] as Slot[]) {
       const g = get(outfit, s);
       if (!g) continue;
       if (g.item.attrs.goodFor?.includes(face)) add(s === "hair" ? 6 : 3, `${g.item.name} suits a ${face} face.`);
@@ -162,7 +162,7 @@ export function scoreLook(profile: Profile, outfit: Outfit): LookScore {
 
   /* ---------- colour ---------- */
   cat = "colour";
-  const nearFace = [dress ?? top, outer, get(outfit, "lips")].filter(Boolean) as { w: Worn; item: Item }[];
+  const nearFace = [dress ?? top, outer, get(outfit, "scarf"), get(outfit, "lips")].filter(Boolean) as { w: Worn; item: Item }[];
   for (const g of nearFace) {
     const fit = paletteFit(g.w.color, color.palette);
     if (fit === "great") {
@@ -179,6 +179,54 @@ export function scoreLook(profile: Profile, outfit: Outfit): LookScore {
   const darkLight = worn.some((w) => deltaE(w.color, "#111111") < 12) && worn.some((w) => deltaE(w.color, "#ffffff") < 12);
   if (darkLight && color.contrast === "high") add(3, "Black-and-white contrast echoes your own strong contrast.", "research", "contrast");
   if (darkLight && color.contrast === "low") add(-2, "Stark black and white can overpower soft colouring. Try charcoal and cream instead.", "research", "contrast");
+
+  /* ---------- bags & accessories (stylist conventions) ---------- */
+  cat = "accessories";
+  const bag = get(outfit, "bag");
+  if (bag) {
+    const size = bag.item.attrs.size;
+    if (body.heightClass === "petite" && size === "large") add(-3, "A large bag can overwhelm a petite frame. Scale accessories to your size: a small or medium bag keeps you in proportion.");
+    else if (body.heightClass === "petite" && (size === "small" || size === "mini")) add(3, "A small bag is in proportion with your petite frame.");
+    else if (body.heightClass === "tall" && size === "large") add(3, "Your height carries a larger bag easily.");
+    else if (body.heightClass === "tall" && size === "mini") add(-1, "A mini bag can look lost on a tall frame. A medium or large bag balances your height.");
+    else add(2, "This bag is a good size for your frame.");
+    // Where the bag sits draws the eye there.
+    const atHip = bag.item.attrs.carry === "crossbody" || bag.item.attrs.kind === "tote";
+    if (HIP_HEAVY.includes(shape) && atHip) add(-2, "A bag that rests at your hips adds width there. Try a shorter shoulder strap or a top-handle bag held at the waist.");
+    if (HIP_HEAVY.includes(shape) && bag.item.attrs.carry === "shoulder" && bag.item.attrs.size !== "large") add(2, "A short-strap bag sits near your waist and draws the eye up, away from your hips.");
+    if (TOP_HEAVY.includes(shape) && bag.item.attrs.carry === "shoulder" && bag.item.attrs.size !== "large") add(-1, "A short shoulder bag sits beside your bust and widens the top half. Try a crossbody or a bag carried lower.");
+    if (TOP_HEAVY.includes(shape) && (bag.item.attrs.carry === "crossbody" || bag.item.attrs.carry === "hand")) add(2, "A bag carried lower adds interest at the hips, balancing broader shoulders.");
+  }
+  const necklace = get(outfit, "necklace");
+  if (necklace) {
+    const len = necklace.item.attrs.length;
+    if (neckline === "v" || neckline === "scoop" || neckline === "sweetheart") {
+      if (len === "long" || len === "medium") add(3, "A necklace that follows your neckline (a pendant into a V or scoop) frames your face.");
+      if (necklace.item.attrs.kind === "bib") add(-2, "A bib necklace fights a low neckline. Let a fine pendant echo its shape instead.");
+    }
+    if ((neckline === "crew" || neckline === "boat") && len === "short") add(3, "A short necklace sits neatly above a high neckline.");
+    if ((neckline === "turtle" || neckline === "collar") && len === "long") add(3, "A long pendant over a high neck adds a slimming vertical line.");
+    if ((neckline === "turtle" || neckline === "collar" || neckline === "halter") && necklace.item.attrs.kind === "choker") add(-3, "A choker clashes with a high or halter neckline. Try a long pendant.");
+  }
+  const scarf = get(outfit, "scarf");
+  if (scarf) {
+    if (scarf.item.attrs.kind === "long" && body.heightClass !== "tall") add(2, "A long scarf hanging open adds an unbroken vertical line, which reads taller.");
+    if (scarf.item.attrs.kind === "blanket" && body.heightClass === "petite") add(-2, "A chunky blanket scarf adds a lot of bulk to a petite frame. Try a long, finer scarf.");
+    if (scarf.item.attrs.kind === "blanket" && TOP_HEAVY.includes(shape)) add(-2, "Volume around the neck widens the shoulders. A long, flat scarf keeps a cleaner line.");
+    if (scarf.item.attrs.kind === "neckerchief" && HIP_HEAVY.includes(shape)) add(2, "A neck scarf draws the eye up to your face and shoulders.");
+  }
+  // One focal point: too many statement pieces near the face compete.
+  const statements = [necklace, get(outfit, "earrings"), scarf].filter((g) => g && (g.item.attrs.statement || (g.item.slot === "earrings" && g.item.attrs.kind === "drop") || g.item.attrs.kind === "blanket"));
+  if (statements.length >= 2) add(-2, "Statement necklace, drop earrings and a big scarf compete. Pick one focal point near the face.");
+  // Metals: warm palettes suit gold; cool palettes suit silver.
+  const metalPieces = (["necklace", "earrings", "wrist", "bag", "belt"] as Slot[]).map((s) => get(outfit, s)).filter(Boolean) as { w: Worn; item: Item }[];
+  const gold = metalPieces.filter((g) => deltaE(g.w.color, "#d4af37") < 18).length;
+  const silver = metalPieces.filter((g) => deltaE(g.w.color, "#c0c0c0") < 12).length;
+  const warmMetal = /gold|bronze|copper|brass/i.test(color.palette.metals.split(",")[0]);
+  if (gold && warmMetal) add(2, `Gold tones suit your warm colouring (your best metals: ${color.palette.metals.toLowerCase()}).`);
+  if (silver && !warmMetal) add(2, `Silver tones suit your cool colouring (your best metals: ${color.palette.metals.toLowerCase()}).`);
+  if (gold && !warmMetal && !silver) add(-1, `Gold can look brassy against cool colouring. Try ${color.palette.metals.toLowerCase()}.`);
+  if (silver && warmMetal && !gold) add(-1, `Silver can look flat against warm colouring. Try ${color.palette.metals.toLowerCase()}.`);
 
   /* ---------- vibe & trends ---------- */
   cat = "vibe";
