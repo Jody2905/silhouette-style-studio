@@ -41,7 +41,6 @@ export function Studio({
   onAddPhoto: () => void;
   onSave: (name: string) => Promise<void>;
 }) {
-  const [view, setView] = useState<"avatar" | "photo">(scene ? "photo" : "avatar");
   const items = useMemo(() => catalogFor(profile.wardrobe), [profile.wardrobe]);
   const slots = SLOTS.filter((s) => items.some((i) => i.slot === s));
   const [slot, setSlot] = useState<Slot>("top");
@@ -104,22 +103,18 @@ export function Studio({
             </button>
           </div>
         </div>
-        <div className="view-switch" role="tablist" aria-label="Show the look on">
-          <button type="button" role="tab" aria-selected={view === "avatar"} className={view === "avatar" ? "on" : ""} onClick={() => setView("avatar")}>
-            Avatar
-          </button>
-          <button type="button" role="tab" aria-selected={view === "photo"} className={view === "photo" ? "on" : ""} onClick={() => (scene ? setView("photo") : onAddPhoto())}>
-            My photo
-          </button>
-        </div>
-        {view === "photo" && scene ? (
+        {scene ? (
           <PhotoTryOn scene={scene} profile={profile} outfit={outfit} />
         ) : (
           <div className="avatar-wrap">
             <Avatar profile={profile} outfit={outfit} faceImg={faceImg} />
           </div>
         )}
-        {!scene && <p className="muted small center">Add a photo on the You tab to try looks on yourself. It stays on your device.</p>}
+        {!scene && (
+          <p className="muted small center">
+            <button type="button" className="link" onClick={onAddPhoto}>Add a photo</button> to try looks on yourself instead of this drawing. It stays on your device.
+          </p>
+        )}
         <form className="save-row" onSubmit={save}>
           <input aria-label="Look name" placeholder="Name this look" value={saveName} maxLength={60} onChange={(e) => setSaveName(e.target.value)} />
           <button type="submit" className="btn">

@@ -157,7 +157,7 @@ export default function App() {
             onSave={async (name) => setLooks(await store.add(name, outfit, scoreLook(profile, outfit).score))}
           />
         )}
-        {tab === "guide" && <Guide profile={profile} faceImg={faceImg} />}
+        {tab === "guide" && <Guide profile={profile} faceImg={faceImg} scene={scene} />}
         {tab === "trends" && (
           <Trends
             profile={profile}

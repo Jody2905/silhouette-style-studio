@@ -222,10 +222,8 @@ function uncover(ctx: CanvasRenderingContext2D, scene: PhotoScene, pf: PhotoFigu
 
 interface GarmentOpts {
   opacity?: number;
-  /** Paths (by index) that may extend past the body outline, e.g. a wide leg or a full skirt. */
-  loose?: number[];
-  /** Loose parts only flare out below this figure y (above it the garment hugs the body). */
-  looseFromY?: number;
+  /** Paths (by index) that are skirts, which hang across the gap between the legs. */
+  bridge?: number[];
 }
 
 /**
@@ -240,7 +238,7 @@ function paintGarment(ctx: CanvasRenderingContext2D, scene: PhotoScene, pf: Phot
   const all = new Path2D();
   for (const p of shapes) all.addPath(p);
 
-  // 1. Allowed area = outline widened sideways, cut to the real body; plus any loose parts that flare out.
+  // 1. Allowed area = outline widened sideways, cut to the real body (skirts also bridge the leg gap).
   const allow = canvasOf(W, H);
   const a = allow.getContext("2d")!;
   toPhoto(a);
@@ -265,13 +263,12 @@ function paintGarment(ctx: CanvasRenderingContext2D, scene: PhotoScene, pf: Phot
     a.globalCompositeOperation = "destination-in";
     a.drawImage(body, 0, 0);
     a.globalCompositeOperation = "source-over";
-    if (o.loose?.length) {
+    if (o.bridge?.length) {
+      // Skirts hang across the gap between the legs (but no wider than the body).
       toPhoto(a);
       a.save();
-      a.beginPath();
-      a.rect(-1e4, o.looseFromY ?? -1e4, 2e4, 2e4);
-      a.clip();
-      for (const i of o.loose) if (shapes[i]) a.fill(shapes[i]);
+      a.clip(torsoOutline(pf.F));
+      for (const i of o.bridge) if (shapes[i]) a.fill(shapes[i]);
       a.restore();
     }
   } else {
@@ -594,19 +591,6 @@ function paintShoes(ctx: CanvasRenderingContext2D, scene: PhotoScene, worn: Worn
   }
 }
 
-/** Which parts of a garment are cut wider than the body (and from where), so they can flare past the outline. */
-function looseFor(F: Figure, slot: Slot, outfit: Outfit): Pick<GarmentOpts, "loose" | "looseFromY"> {
-  const a = outfit[slot] ? ITEM[outfit[slot]!.id]?.attrs : undefined;
-  if (!a) return {};
-  const flaredLeg = a.leg === "wide" || a.leg === "flare" || a.leg === "bootcut" || a.leg === "balloon";
-  const fullSkirt = a.skirt === "a-line" || a.skirt === "pleated" || a.skirt === "wrap" || a.skirt === "fit-flare";
-  if (slot === "bottom" && (flaredLeg || fullSkirt)) return { loose: [0], looseFromY: F.y.hip };
-  if (slot === "dress" && (flaredLeg || fullSkirt)) return { loose: [0], looseFromY: F.y.hip };
-  if (slot === "outer" && (a.fit !== "fitted" || a.length === "long")) return { loose: [...Array(12).keys()], looseFromY: a.fit === "oversized" ? F.y.shoulder : F.y.hip };
-  if (slot === "top" && a.fit === "oversized") return { loose: [...Array(6).keys()], looseFromY: F.y.bust };
-  return {};
-}
-
 /** All garment outlines for a look, in figure coordinates, in the order they're layered. */
 function garmentLayers(F: Figure, outfit: Outfit): { slot: Slot; paths: string[] }[] {
   const out: { slot: Slot; paths: string[] }[] = [];
@@ -673,7 +657,10 @@ export function PhotoTryOn({ scene, profile, outfit }: { scene: PhotoScene; prof
       if (outfit.shoes && fullLegs && pf.legsVisible) paintShoes(ctx, scene, outfit.shoes);
       for (const l of layers) {
         const sheer = l.slot === "top" && ITEM[outfit.top!.id]?.attrs.sheer;
-        paintGarment(ctx, scene, pf, body, l.paths, outfit[l.slot]!, { opacity: sheer ? 0.55 : 1, ...looseFor(pf.F, l.slot, outfit) });
+        paintGarment(ctx, scene, pf, body, l.paths, outfit[l.slot]!, {
+          opacity: sheer ? 0.55 : 1,
+          bridge: (l.slot === "bottom" && ITEM[outfit.bottom!.id]?.attrs.kind === "skirt") || (l.slot === "dress" && !ITEM[outfit.dress!.id]?.attrs.leg) ? [0] : [],
+        });
       }
       if (outfit.shoes && !fullLegs && pf.legsVisible) paintShoes(ctx, scene, outfit.shoes);
     }
@@ -701,7 +688,7 @@ export function PhotoTryOn({ scene, profile, outfit }: { scene: PhotoScene; prof
           ? "Your shoulders and hips weren't clear in this photo, so clothes can't be placed. Hair colour and makeup still work. Try a full-length, front-facing photo."
           : !pf.legsVisible
             ? "Your legs aren't in the photo, so shoes and the lower half of bottoms can't be shown."
-            : "Clothes take their folds and shadows from your photo. Hairstyle shapes show on the avatar; on your photo, hair changes colour only."}
+            : "Clothes are fitted to your body in the photo and take their folds and shadows from it. Hair changes colour; hairstyle shapes can't be changed on a photo."}
         {!scene.hair && " Hair recolouring needs the hair model, which didn't load."}
       </p>
     </div>

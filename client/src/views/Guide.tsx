@@ -1,9 +1,11 @@
 import { buildGuide, styleMe, type Outfit, type Profile } from "@silhouette/engine";
 import { useMemo } from "react";
 import { Avatar } from "../avatar/Avatar";
+import { PhotoTryOn } from "../photo/PhotoTryOn";
+import type { PhotoScene } from "../vision/analyse";
 import { EvidenceBadge, Section, Swatch } from "../components/common";
 
-export function Guide({ profile, faceImg }: { profile: Profile; faceImg: string | null }) {
+export function Guide({ profile, faceImg, scene }: { profile: Profile; faceImg: string | null; scene: PhotoScene | null }) {
   const g = useMemo(() => buildGuide(profile), [profile]);
   const signature = useMemo(() => styleMe(profile, { seed: 3 }), [profile]);
   const masc = profile.wardrobe === "menswear";
@@ -19,7 +21,7 @@ export function Guide({ profile, faceImg }: { profile: Profile; faceImg: string 
           <p className="muted">{g.body.summary}</p>
         </div>
         <div className="hero-avatar">
-          <Avatar profile={profile} outfit={signature as Outfit} faceImg={faceImg} title="Your signature look" />
+          {scene ? <PhotoTryOn scene={scene} profile={profile} outfit={signature as Outfit} /> : <Avatar profile={profile} outfit={signature as Outfit} faceImg={faceImg} title="Your signature look" />}
           <span className="cap">A signature look picked for you</span>
         </div>
       </section>
