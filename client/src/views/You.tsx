@@ -37,6 +37,7 @@ export function You({
   const [status, setStatus] = useState<"" | "loading" | "done" | "error">("");
   const [result, setResult] = useState<PhotoAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState("Reading your face and body…");
   const [showFace, setShowFace] = useState(!!faceImg);
   const imgRef = useRef<HTMLImageElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -63,10 +64,19 @@ export function You({
     // Wait for the <img> to load the file, then analyse it in this browser.
     await new Promise((r) => setTimeout(r, 30));
     const img = imgRef.current!;
-    if (!img.complete) await new Promise((r) => (img.onload = r));
+    const loaded = img.complete && img.naturalWidth > 0
+      ? true
+      : await new Promise<boolean>((r) => {
+          img.onload = () => r(true);
+          img.onerror = () => r(false);
+        });
+    if (!loaded) {
+      setStatus("error");
+      return setError("This browser can't open that image type (iPhone HEIC photos often do this). Save it as a JPG or PNG and try again.");
+    }
     try {
       const { analysePhoto } = await import("../vision/analyse");
-      const r = await analysePhoto(img);
+      const r = await analysePhoto(img, setStep);
       setResult(r);
       setStatus("done");
       onScene(r.scene);
@@ -86,9 +96,10 @@ export function You({
         setFaceImg(r.faceCrop);
         setShowFace(true);
       }
-    } catch {
+    } catch (e) {
       setStatus("error");
-      setError("The photo AI couldn't load. Check your connection and try again, or fill in the details below yourself.");
+      const msg = e instanceof Error && e.message.startsWith("The AI models") ? e.message : "The photo AI couldn't load. Check your connection and try again, or fill in the details below yourself.";
+      setError(msg);
     }
   }
 
@@ -103,7 +114,7 @@ export function You({
         <div className="photo-row">
           <div className="photo-box">
             {photo ? <img ref={imgRef} src={photo} alt="Your uploaded photo" /> : <div className="photo-empty">No photo yet</div>}
-            {status === "loading" && <div className="photo-busy">Reading your face and body…</div>}
+            {status === "loading" && <div className="photo-busy" role="status">{step}</div>}
           </div>
           <div className="photo-side">
             <input ref={fileRef} id="photo" type="file" accept="image/*" hidden onChange={(e) => onFile(e.target.files?.[0])} />

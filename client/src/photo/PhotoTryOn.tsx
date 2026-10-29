@@ -2,7 +2,7 @@
 // Clothing takes its folds and shadows from the photo itself; hair is recoloured inside the hair mask;
 // makeup follows the face landmarks. Nothing leaves the browser.
 import { HAIR_HEX, ITEM, faceShapeOf, type Outfit, type Pattern, type Profile, type Slot, type Worn } from "@silhouette/engine";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { bodicePath, bodyHalf, hemFor, outerPanels, skirtPath, sleeves, trouserPath } from "../avatar/garments";
 import { shade, type Figure, type Pt } from "../avatar/geometry";
 import type { PhotoScene } from "../vision/analyse";
@@ -158,36 +158,158 @@ function patternTile(color: string, pattern: Pattern): HTMLCanvasElement {
 }
 
 /**
- * Paints garment shapes onto the photo: flat colour (or print), multiplied by the photo's own fold map so
- * creases and shadows show through, then trimmed back to the garment outline.
+ * Where clothes may go: the person's real outline from the photo, minus their hair and face.
+ * Garments are cut to this, so they follow the actual body instead of the avatar's idealised shape.
  */
-function paintGarment(ctx: CanvasRenderingContext2D, scene: PhotoScene, pf: PhotoFigure, paths: string[], worn: Worn, opacity = 1) {
-  const layer = canvasOf(scene.W, scene.H);
+function bodyMask(scene: PhotoScene): HTMLCanvasElement | null {
+  if (!scene.person) return null;
+  const c = canvasOf(scene.W, scene.H);
+  const g = c.getContext("2d")!;
+  g.drawImage(scene.person, 0, 0);
+  g.globalCompositeOperation = "destination-out";
+  if (scene.hair) g.drawImage(scene.hair, 0, 0);
+  if (scene.faceSkin) g.drawImage(scene.faceSkin, 0, 0);
+  const f = scene.face;
+  if (f) {
+    // Always keep the face itself clear (jawline down to the chin), even without the segmenter.
+    const cx = (f[234].x + f[454].x) / 2, cy = (f[10].y + f[152].y) / 2;
+    g.beginPath();
+    g.ellipse(cx, cy, Math.abs(f[454].x - f[234].x) * 0.52, Math.abs(f[152].y - f[10].y) * 0.53, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  return c;
+}
+
+/** The avatar's body outline (neck to ankles, without arms), slightly inset, in figure units. */
+function torsoOutline(F: Figure): Path2D {
+  const ys: number[] = [];
+  for (let yy = F.y.neck; yy <= F.y.ankle; yy += 6) ys.push(yy);
+  const inset = 6;
+  const L = ys.map((yy) => `${F.cx - Math.max(2, bodyHalf(F, yy) - inset)},${yy}`);
+  const R = ys.map((yy) => `${F.cx + Math.max(2, bodyHalf(F, yy) - inset)},${yy}`).reverse();
+  return new Path2D(`M${L.join(" L")} L${R.join(" L")} Z`);
+}
+
+/**
+ * Paints skin over the clothes already in the photo, in the areas a new look might leave bare
+ * (chest and arms when a top or dress is chosen, legs under a skirt or shorts). The new garments then go on top,
+ * so a V-neck or short sleeve shows skin rather than the old outfit.
+ */
+function uncover(ctx: CanvasRenderingContext2D, scene: PhotoScene, pf: PhotoFigure, skin: string, upper: boolean, legs: boolean) {
+  if (!scene.clothes || (!upper && !legs)) return;
+  const { W, H } = scene;
+  const F = pf.F;
+  const region = new Path2D();
+  if (upper) {
+    region.rect(-1e4, F.y.neck, 2e4, F.y.underbust - F.y.neck); // chest band
+    for (const d of sleeves(F, "long", "oversized")) region.addPath(new Path2D(d)); // arms
+  }
+  if (legs) region.rect(-1e4, F.y.crotch, 2e4, 2e4);
+  const layer = canvasOf(W, H);
   const g = layer.getContext("2d")!;
-  const toPhoto = () => g.setTransform(1 / pf.k, 0, 0, 1 / pf.k, pf.ox, pf.oy);
-  toPhoto();
-  // One combined outline, so trimming keeps every piece (body, sleeves, panels).
-  const shape = new Path2D();
-  for (const d of paths) shape.addPath(new Path2D(d));
+  g.fillStyle = skin;
+  g.fillRect(0, 0, W, H);
+  if (scene.shade) {
+    g.globalCompositeOperation = "multiply";
+    g.drawImage(scene.shade, 0, 0);
+  }
+  g.globalCompositeOperation = "destination-in";
+  g.drawImage(scene.clothes, 0, 0);
+  g.setTransform(1 / pf.k, 0, 0, 1 / pf.k, pf.ox, pf.oy);
+  g.fill(region);
+  ctx.drawImage(layer, 0, 0);
+}
+
+interface GarmentOpts {
+  opacity?: number;
+  /** Paths (by index) that may extend past the body outline, e.g. a wide leg or a full skirt. */
+  loose?: number[];
+  /** Loose parts only flare out below this figure y (above it the garment hugs the body). */
+  looseFromY?: number;
+}
+
+/**
+ * Paints a garment onto the photo. The avatar-style outline decides where the garment starts and stops
+ * (neckline, sleeve length, hem); the photo's own body outline decides its edges, so it fits the real person.
+ * Colour (or print) is multiplied by the photo's fold map so creases and shadows show through.
+ */
+function paintGarment(ctx: CanvasRenderingContext2D, scene: PhotoScene, pf: PhotoFigure, body: HTMLCanvasElement | null, paths: string[], worn: Worn, o: GarmentOpts = {}) {
+  const { W, H } = scene;
+  const toPhoto = (g: CanvasRenderingContext2D) => g.setTransform(1 / pf.k, 0, 0, 1 / pf.k, pf.ox, pf.oy);
+  const shapes = paths.map((d) => new Path2D(d));
+  const all = new Path2D();
+  for (const p of shapes) all.addPath(p);
+
+  // 1. Allowed area = outline widened sideways, cut to the real body; plus any loose parts that flare out.
+  const allow = canvasOf(W, H);
+  const a = allow.getContext("2d")!;
+  toPhoto(a);
+  a.fillStyle = "#000";
+  if (body) {
+    // Outside the avatar's torso outline, let the garment spread sideways to the photo's real edges.
+    // Inside it, keep the exact shape, so necklines and open fronts stay open.
+    const grow = 18;
+    for (let dx = -grow; dx <= grow; dx += 3) {
+      a.save();
+      a.translate(dx, 0);
+      a.fill(all);
+      a.restore();
+    }
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.globalCompositeOperation = "destination-out";
+    toPhoto(a);
+    a.fill(torsoOutline(pf.F));
+    a.globalCompositeOperation = "source-over";
+    a.fill(all);
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.globalCompositeOperation = "destination-in";
+    a.drawImage(body, 0, 0);
+    a.globalCompositeOperation = "source-over";
+    if (o.loose?.length) {
+      toPhoto(a);
+      a.save();
+      a.beginPath();
+      a.rect(-1e4, o.looseFromY ?? -1e4, 2e4, 2e4);
+      a.clip();
+      for (const i of o.loose) if (shapes[i]) a.fill(shapes[i]);
+      a.restore();
+    }
+  } else {
+    a.fill(all);
+  }
+
+  // 2. Colour or print everywhere, folds multiplied in, then cut to the allowed area.
+  const layer = canvasOf(W, H);
+  const g = layer.getContext("2d")!;
+  toPhoto(g);
   g.fillStyle = worn.pattern === "solid" ? worn.color : g.createPattern(patternTile(worn.color, worn.pattern), "repeat")!;
-  g.fill(shape);
+  g.fillRect(-1e4, -1e4, 2e4, 2e4);
   g.setTransform(1, 0, 0, 1, 0, 0);
   if (scene.shade) {
     g.globalCompositeOperation = "multiply";
     g.drawImage(scene.shade, 0, 0);
   }
-  // Trim back to the garment (the multiply also touched empty pixels).
   g.globalCompositeOperation = "destination-in";
-  toPhoto();
-  g.fillStyle = "#000";
-  g.fill(shape);
-  // A soft darker edge gives the garment definition against the photo.
+  g.drawImage(allow, 0, 0);
+
+  // 3. A soft shadow just inside the edges gives the fabric some roundness.
+  const soft = canvasOf(W, H);
+  const sg = soft.getContext("2d")!;
+  sg.filter = `blur(${Math.max(3, W / 180)}px)`;
+  sg.drawImage(allow, 0, 0);
+  const rim = canvasOf(W, H);
+  const r = rim.getContext("2d")!;
+  r.fillStyle = "#000";
+  r.fillRect(0, 0, W, H);
+  r.globalCompositeOperation = "destination-out";
+  r.drawImage(soft, 0, 0);
   g.globalCompositeOperation = "source-atop";
-  g.strokeStyle = shade(worn.color, -0.45);
-  g.lineWidth = 2.5;
-  g.globalAlpha = 0.5;
-  for (const d of paths) g.stroke(new Path2D(d));
-  ctx.globalAlpha = opacity;
+  g.globalAlpha = 0.3;
+  g.drawImage(rim, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = "source-over";
+
+  ctx.globalAlpha = o.opacity ?? 1;
   ctx.drawImage(layer, 0, 0);
   ctx.globalAlpha = 1;
 }
@@ -472,6 +594,19 @@ function paintShoes(ctx: CanvasRenderingContext2D, scene: PhotoScene, worn: Worn
   }
 }
 
+/** Which parts of a garment are cut wider than the body (and from where), so they can flare past the outline. */
+function looseFor(F: Figure, slot: Slot, outfit: Outfit): Pick<GarmentOpts, "loose" | "looseFromY"> {
+  const a = outfit[slot] ? ITEM[outfit[slot]!.id]?.attrs : undefined;
+  if (!a) return {};
+  const flaredLeg = a.leg === "wide" || a.leg === "flare" || a.leg === "bootcut" || a.leg === "balloon";
+  const fullSkirt = a.skirt === "a-line" || a.skirt === "pleated" || a.skirt === "wrap" || a.skirt === "fit-flare";
+  if (slot === "bottom" && (flaredLeg || fullSkirt)) return { loose: [0], looseFromY: F.y.hip };
+  if (slot === "dress" && (flaredLeg || fullSkirt)) return { loose: [0], looseFromY: F.y.hip };
+  if (slot === "outer" && (a.fit !== "fitted" || a.length === "long")) return { loose: [...Array(12).keys()], looseFromY: a.fit === "oversized" ? F.y.shoulder : F.y.hip };
+  if (slot === "top" && a.fit === "oversized") return { loose: [...Array(6).keys()], looseFromY: F.y.bust };
+  return {};
+}
+
 /** All garment outlines for a look, in figure coordinates, in the order they're layered. */
 function garmentLayers(F: Figure, outfit: Outfit): { slot: Slot; paths: string[] }[] {
   const out: { slot: Slot; paths: string[] }[] = [];
@@ -515,7 +650,8 @@ function garmentLayers(F: Figure, outfit: Outfit): { slot: Slot; paths: string[]
 export function PhotoTryOn({ scene, profile, outfit }: { scene: PhotoScene; profile: Profile; outfit: Outfit }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const [compare, setCompare] = useState(false);
-  const [pf] = useState(() => figureFromScene(scene, profile));
+  const pf = useMemo(() => figureFromScene(scene, profile), [scene, profile.wardrobe, profile.faceShape, profile.faceRatios]);
+  const body = useMemo(() => bodyMask(scene), [scene]);
 
   useEffect(() => {
     const c = ref.current;
@@ -531,15 +667,18 @@ export function PhotoTryOn({ scene, profile, outfit }: { scene: PhotoScene; prof
       const layers = garmentLayers(pf.F, outfit);
       // Full-length trousers go over shoes; everything else goes under them.
       const fullLegs = (outfit.bottom && ITEM[outfit.bottom.id]?.attrs.length === "full" && ITEM[outfit.bottom.id]?.attrs.kind !== "skirt") || (outfit.dress && ITEM[outfit.dress.id]?.attrs.leg);
+      const lowerItem = outfit.dress ? ITEM[outfit.dress.id] : outfit.bottom ? ITEM[outfit.bottom.id] : undefined;
+      const showsLegs = !!lowerItem && lowerItem.attrs.length !== "full" && lowerItem.attrs.length !== "maxi";
+      uncover(ctx, scene, pf, profile.skinHex ?? "#b07a55", !!(outfit.top || outfit.dress), showsLegs && pf.legsVisible);
       if (outfit.shoes && fullLegs && pf.legsVisible) paintShoes(ctx, scene, outfit.shoes);
       for (const l of layers) {
         const sheer = l.slot === "top" && ITEM[outfit.top!.id]?.attrs.sheer;
-        paintGarment(ctx, scene, pf, l.paths, outfit[l.slot]!, sheer ? 0.55 : 1);
+        paintGarment(ctx, scene, pf, body, l.paths, outfit[l.slot]!, { opacity: sheer ? 0.55 : 1, ...looseFor(pf.F, l.slot, outfit) });
       }
       if (outfit.shoes && !fullLegs && pf.legsVisible) paintShoes(ctx, scene, outfit.shoes);
     }
     paintFace(ctx, scene, outfit);
-  }, [scene, pf, outfit, profile.hairColor, compare]);
+  }, [scene, pf, body, outfit, profile.hairColor, profile.skinHex, compare]);
 
   return (
     <div className="photo-tryon">

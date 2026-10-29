@@ -113,7 +113,7 @@ export function Studio({
           </button>
         </div>
         {view === "photo" && scene ? (
-          <PhotoTryOn key={scene.W + "x" + scene.H} scene={scene} profile={profile} outfit={outfit} />
+          <PhotoTryOn scene={scene} profile={profile} outfit={outfit} />
         ) : (
           <div className="avatar-wrap">
             <Avatar profile={profile} outfit={outfit} faceImg={faceImg} />

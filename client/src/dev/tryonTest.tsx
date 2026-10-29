@@ -32,6 +32,7 @@ g.fillStyle = "#eee"; g.beginPath(); g.ellipse(265, 940, 34, 14, 0, 0, 7); g.ell
 const personMask = cv(); const pm = personMask.getContext("2d")!; pm.fillStyle = "#000";
 pm.fill(person); pm.fill(torso); pm.fill(legs); pm.fill(arms); pm.beginPath(); pm.ellipse(265, 940, 34, 14, 0, 0, 7); pm.ellipse(335, 940, 34, 14, 0, 0, 7); pm.fill();
 const hairMask = cv(); const hm = hairMask.getContext("2d")!; hm.fillStyle = "#000"; hm.beginPath(); hm.ellipse(300, 85, 70, 45, 0, Math.PI, 0); hm.fill(); hm.fillRect(232, 85, 22, 110); hm.fillRect(346, 85, 22, 110);
+const clothesMask = cv(); const cmx = clothesMask.getContext("2d")!; cmx.fillStyle = "#000"; cmx.fill(torso); cmx.fill(legs);
 const shadeOf = (mask: HTMLCanvasElement) => {
   const s = cv(); const sg = s.getContext("2d")!; sg.fillStyle = "#fff"; sg.fillRect(0, 0, W, H);
   const tmp = cv(); const tg = tmp.getContext("2d")!; tg.drawImage(photo, 0, 0); tg.globalCompositeOperation = "destination-in"; tg.drawImage(mask, 0, 0);
@@ -55,16 +56,17 @@ const P = (i: number, x: number, y: number) => (pose[i] = { x, y, v: 0.99 });
 P(0, 300, 160); P(11, 225, 258); P(12, 375, 258); P(13, 182, 400); P(14, 418, 400); P(15, 160, 515); P(16, 440, 515);
 P(23, 255, 500); P(24, 345, 500); P(25, 268, 720); P(26, 332, 720); P(27, 268, 920); P(28, 332, 920); P(29, 260, 945); P(30, 340, 945); P(31, 290, 950); P(32, 310, 950);
 
-const scene: PhotoScene = { photo, W, H, face, pose, person: personMask, hair: hairMask, shade: shadeMap(photo, personMask), hairShade: shadeMap(photo, hairMask) };
-const profile = ProfileSchema.parse({ ...DEFAULT_PROFILE, hairColor: "dark-brown" });
+const scene: PhotoScene = { photo, W, H, face, pose, person: personMask, hair: hairMask, shade: shadeMap(photo, personMask), hairShade: shadeMap(photo, hairMask), clothes: clothesMask };
+const profile = ProfileSchema.parse({ ...DEFAULT_PROFILE, hairColor: "dark-brown", skinHex: "#b07850" });
 const looks: [string, Outfit][] = [
   ["original", {}],
   ["wrap dress + makeup", { dress: wear("dress-wrap", "#b6406a", "dots"), lips: wear("lips-red"), eyes: wear("eyes-winged"), blush: wear("blush-apples"), hair: wear("hair-lob", "#a2462a"), shoes: wear("shoes-pumps"), earrings: wear("ear-hoops") }],
   ["blazer + wide trousers", { top: wear("top-turtleneck", "#efe3c8"), bottom: wear("bottom-wide-trousers", "#c19a6b"), outer: wear("outer-blazer", "#1b2a4a"), shoes: wear("shoes-loafers"), glasses: wear("glasses-square"), hair: wear("hair-bob", "#d4b06a") }],
+  ["cami + mini skirt", { top: wear("top-cowl", "#a77b98"), bottom: wear("bottom-pleated", "#6b1c2a", "check"), shoes: wear("shoes-pumps") }],
   ["menswear", { top: wear("top-shirt", "#9bb8d8", "check"), bottom: wear("bottom-chinos"), beard: wear("beard-boxed"), hat: wear("hat-cap"), shoes: wear("shoes-sneakers"), belt: wear("belt-waist") }],
 ];
 createRoot(document.getElementById("root")!).render(
-  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, padding: 8 }}>
+  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, padding: 8 }}>
     {looks.map(([name, o]) => <div key={name}><b>{name}</b><PhotoTryOn scene={scene} profile={profile} outfit={o} /></div>)}
   </div>,
 );

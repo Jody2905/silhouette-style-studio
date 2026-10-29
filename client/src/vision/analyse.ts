@@ -34,7 +34,7 @@ function loadModels() {
 
 /** Everything photo try-on needs, kept in memory for this session only. */
 export interface PhotoScene {
-  /** The photo, scaled down to at most 1100 px on the long side. */
+  /** The photo, scaled down to at most 900 px on the long side. */
   photo: HTMLCanvasElement;
   W: number;
   H: number;
@@ -45,6 +45,10 @@ export interface PhotoScene {
   /** Soft alpha masks at photo size. */
   person: HTMLCanvasElement | null;
   hair: HTMLCanvasElement | null;
+  /** Face skin (so clothes never cover the face), when the segmenter loaded. */
+  faceSkin?: HTMLCanvasElement | null;
+  /** The clothes the person is wearing in the photo, when the segmenter loaded. */
+  clothes?: HTMLCanvasElement | null;
   /** Grayscale "fold map" (shadows and creases) normalised so clothing colour can be multiplied with it. */
   shade: HTMLCanvasElement | null;
   hairShade: HTMLCanvasElement | null;
@@ -97,7 +101,7 @@ export function shadeMap(photo: HTMLCanvasElement, mask: HTMLCanvasElement): HTM
   gctx.drawImage(photo, 0, 0);
   const soft = canvasOf(W, H);
   const sctx = soft.getContext("2d", { willReadFrequently: true })!;
-  sctx.filter = `blur(${Math.max(6, Math.round(W / 45))}px)`;
+  sctx.filter = `blur(${Math.max(5, Math.round(W / 70))}px)`;
   sctx.drawImage(gray, 0, 0);
   const lum = gctx.getImageData(0, 0, W, H).data;
   const avg = sctx.getImageData(0, 0, W, H).data;
@@ -108,7 +112,8 @@ export function shadeMap(photo: HTMLCanvasElement, mask: HTMLCanvasElement): HTM
   for (let i = 0; i < W * H; i++) {
     const a = m[i * 4 + 3] / 255;
     const ratio = (lum[i * 4] + 4) / (avg[i * 4] + 4);
-    const v = Math.max(0.45, Math.min(1, 0.06 + ratio * 0.94));
+    // Softened so edges between the old clothes (e.g. a light top over dark jeans) don't leave dark bands.
+    const v = Math.max(0.62, Math.min(1, 1 - (1 - ratio) * 0.75));
     const g = Math.round(255 * (1 - a + a * v));
     img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = g;
     img.data[i * 4 + 3] = 255;
@@ -137,9 +142,23 @@ function sampleSkin(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }
   return toHex(avg[0], avg[1], avg[2]);
 }
 
-export async function analysePhoto(img: HTMLImageElement): Promise<PhotoAnalysis> {
-  const { face, pose, seg } = await loadModels();
-  const scale = Math.min(1, 1100 / Math.max(img.naturalWidth, img.naturalHeight));
+/** Lets the browser repaint and handle input between heavy steps, so the tab never looks frozen. */
+const breathe = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(msg)), ms);
+    p.then((v) => (clearTimeout(t), resolve(v)), (e) => (clearTimeout(t), reject(e)));
+  });
+}
+
+export type Progress = (step: string) => void;
+
+export async function analysePhoto(img: HTMLImageElement, onProgress: Progress = () => {}): Promise<PhotoAnalysis> {
+  onProgress("Loading the AI models (first time only)…");
+  const { face, pose, seg } = await withTimeout(loadModels(), 90_000, "The AI models took too long to download. Check your connection and try again.");
+  await breathe();
+  const scale = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
   const W = Math.round(img.naturalWidth * scale), H = Math.round(img.naturalHeight * scale);
   const canvas = canvasOf(W, H);
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
@@ -149,6 +168,8 @@ export async function analysePhoto(img: HTMLImageElement): Promise<PhotoAnalysis
   const out: PhotoAnalysis = { faceRatios: null, skinHex: null, faceCrop: null, photoBody: null, notes, scene };
 
   /* ---------- face ---------- */
+  onProgress("Reading your face…");
+  await breathe();
   const fr = face.detect(canvas);
   const lm = fr.faceLandmarks?.[0];
   if (lm) {
@@ -175,6 +196,8 @@ export async function analysePhoto(img: HTMLImageElement): Promise<PhotoAnalysis
   }
 
   /* ---------- body ---------- */
+  onProgress("Reading your body outline…");
+  await breathe();
   const pr = pose.detect(canvas);
   const pl = pr.landmarks?.[0];
   const mask = pr.segmentationMasks?.[0];
@@ -229,11 +252,15 @@ export async function analysePhoto(img: HTMLImageElement): Promise<PhotoAnalysis
   }
   /* ---------- hair & clothes segmentation (for realistic recolouring) ---------- */
   if (seg) {
+    onProgress("Finding your hair…");
+    await breathe();
     try {
       const sr = seg.segment(canvas);
       const cm = sr.categoryMask;
       if (cm) {
         const cats = cm.getAsUint8Array();
+        scene.clothes = maskCanvas(cm.width, cm.height, W, H, (i) => (cats[i] === 4 ? 255 : 0), 1.5);
+        scene.faceSkin = maskCanvas(cm.width, cm.height, W, H, (i) => (cats[i] === 3 ? 255 : 0), 1.5);
         if (cats.some((c) => c === 1)) scene.hair = maskCanvas(cm.width, cm.height, W, H, (i) => (cats[i] === 1 ? 255 : 0), 1.5);
         if (!scene.person) scene.person = maskCanvas(cm.width, cm.height, W, H, (i) => (cats[i] !== 0 ? 255 : 0));
         cm.close();
@@ -243,7 +270,10 @@ export async function analysePhoto(img: HTMLImageElement): Promise<PhotoAnalysis
       /* optional */
     }
   }
+  onProgress("Mapping folds and shadows…");
+  await breathe();
   if (scene.person) scene.shade = shadeMap(canvas, scene.person);
+  await breathe();
   if (scene.hair) scene.hairShade = shadeMap(canvas, scene.hair);
   return out;
 }
