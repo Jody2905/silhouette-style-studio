@@ -1,7 +1,7 @@
 // Dev-only harness: renders PhotoTryOn on a synthetic photo with hand-placed landmarks (no AI models needed).
 import { DEFAULT_PROFILE, ProfileSchema, wear, type Outfit } from "@silhouette/engine";
 import { createRoot } from "react-dom/client";
-import { PhotoTryOn, figureFromScene } from "../photo/PhotoTryOn";
+import { PhotoTryOn } from "../photo/PhotoTryOn";
 import "../styles.css";
 import { shadeMap, type PhotoScene } from "../vision/analyse";
 

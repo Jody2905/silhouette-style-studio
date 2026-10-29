@@ -113,7 +113,7 @@ export function shadeMap(photo: HTMLCanvasElement, mask: HTMLCanvasElement): HTM
     const a = m[i * 4 + 3] / 255;
     const ratio = (lum[i * 4] + 4) / (avg[i * 4] + 4);
     // Softened so edges between the old clothes (e.g. a light top over dark jeans) don't leave dark bands.
-    const v = Math.max(0.62, Math.min(1, 1 - (1 - ratio) * 0.75));
+    const v = Math.max(0.68, Math.min(1, 1 - (1 - ratio) * 0.62));
     const g = Math.round(255 * (1 - a + a * v));
     img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = g;
     img.data[i * 4 + 3] = 255;
@@ -121,7 +121,7 @@ export function shadeMap(photo: HTMLCanvasElement, mask: HTMLCanvasElement): HTM
   octx.putImageData(img, 0, 0);
   const blurred = canvasOf(W, H);
   const bctx = blurred.getContext("2d")!;
-  bctx.filter = "blur(0.8px)";
+  bctx.filter = "blur(1.4px)";
   bctx.drawImage(out, 0, 0);
   return blurred;
 }
