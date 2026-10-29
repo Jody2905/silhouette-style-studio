@@ -43,6 +43,13 @@ const SCHEMA = `
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS idx_looks_user ON looks (user_id, created_at DESC);
+  -- One row per AI try-on, only to enforce daily limits (no images are stored).
+  CREATE TABLE IF NOT EXISTS tryons (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_tryons_time ON tryons (created_at);
 `;
 
 /** Converts `?` placeholders to `$1, $2…`. Our SQL never contains literal question marks. */

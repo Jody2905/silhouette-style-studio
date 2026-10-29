@@ -7,3 +7,4 @@ export * from "./trends";
 export * from "./scoring";
 export * from "./sources";
 export { buildGuide, styleMe, type StyleGuide } from "./guide";
+export { describeLook, colourName } from "./describe";

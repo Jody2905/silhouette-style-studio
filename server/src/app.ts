@@ -1,4 +1,4 @@
-import { ITEM, PATTERNS, ProfileSchema, scoreLook, SLOTS } from "@silhouette/engine";
+import { DEFAULT_PROFILE, describeLook, ITEM, PATTERNS, ProfileSchema, scoreLook, SLOTS } from "@silhouette/engine";
 import cookieParser from "cookie-parser";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
@@ -8,6 +8,7 @@ import path from "node:path";
 import { z } from "zod";
 import { checkPassword, DUMMY_HASH, hashPassword, makeAuth, type AuthedRequest } from "./auth";
 import type { DB } from "./db";
+import { TryOnError, type TryOnFn } from "./tryon";
 
 export interface AppOptions {
   db: DB;
@@ -17,6 +18,10 @@ export interface AppOptions {
   clientDist?: string;
   /** Disable rate limits in tests. */
   rateLimit?: boolean;
+  /** AI try-on ("Make it real"). Disabled when absent (no API key configured). */
+  tryOn?: TryOnFn;
+  /** Daily AI try-on limits: per user, and for the whole site (a spending cap). */
+  tryOnLimits?: { perUser: number; global: number };
 }
 
 const Email = z.string().trim().toLowerCase().email().max(254);
@@ -36,6 +41,13 @@ const LookBody = z.object({ name: z.string().trim().min(1, "Give the look a name
 const RenameBody = z.object({ name: z.string().trim().min(1).max(60) });
 const IdParam = z.coerce.number().int().positive();
 const MAX_LOOKS = 200;
+const TryOnBody = z.object({
+  photo: z
+    .string()
+    .max(4_500_000, "That photo is too large.")
+    .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/, "Send the photo as a JPEG, PNG or WebP."),
+  outfit: OutfitSchema,
+});
 
 /** Wraps async handlers so thrown errors reach the error middleware. */
 const h =
@@ -66,7 +78,9 @@ export function createApp(opts: AppOptions) {
       },
     }),
   );
-  app.use(express.json({ limit: "50kb" }));
+  // Small JSON bodies everywhere, except the AI try-on route, which carries a photo.
+  const smallJson = express.json({ limit: "50kb" });
+  app.use((req, res, next) => (req.path === "/api/tryon" ? next() : smallJson(req, res, next)));
   app.use(cookieParser());
 
   // CSRF defence: state-changing API calls must carry a custom header. Browsers won't send it
@@ -222,6 +236,51 @@ export function createApp(opts: AppOptions) {
     h(async (req, res) => {
       await q.deleteLook.run(IdParam.parse(req.params.id), req.userId!);
       res.json(await q.looks.all(req.userId!));
+    }),
+  );
+
+  /* ---------------- AI try-on ---------------- */
+  const limits = opts.tryOnLimits ?? { perUser: 15, global: 200 };
+  const tq = {
+    userToday: db.prepare<[number], { n: number }>("SELECT COUNT(*)::int AS n FROM tryons WHERE user_id = ? AND created_at > now() - interval '1 day'"),
+    allToday: db.prepare<[], { n: number }>("SELECT COUNT(*)::int AS n FROM tryons WHERE created_at > now() - interval '1 day'"),
+    add: db.prepare<[number]>("INSERT INTO tryons (user_id) VALUES (?)"),
+  };
+
+  app.get(
+    "/api/tryon",
+    auth.requireUser,
+    h(async (req, res) => {
+      const used = (await tq.userToday.get(req.userId!))?.n ?? 0;
+      res.json({ enabled: !!opts.tryOn, remaining: Math.max(0, limits.perUser - used), perDay: limits.perUser });
+    }),
+  );
+
+  app.post(
+    "/api/tryon",
+    auth.requireUser,
+    express.json({ limit: "5mb" }),
+    h(async (req, res) => {
+      if (!opts.tryOn) return res.status(503).json({ error: "AI try-on isn't set up on this server yet." });
+      const me = req.userId!;
+      const body = TryOnBody.parse(req.body);
+      const profile = (await getProfile(me)) ?? DEFAULT_PROFILE;
+      const prompt = describeLook(body.outfit, profile);
+      if (!prompt) return res.status(400).json({ error: "Put something on first, then make it real." });
+      if (((await tq.userToday.get(me))?.n ?? 0) >= limits.perUser)
+        return res.status(429).json({ error: `You've used today's ${limits.perUser} AI try-ons. They reset over the next 24 hours.` });
+      if (((await tq.allToday.get())?.n ?? 0) >= limits.global) return res.status(429).json({ error: "AI try-on has reached today's limit for the site. Try again tomorrow." });
+      // Count the attempt before calling out, so parallel requests can't slip past the limit.
+      await tq.add.run(me);
+      const [, mime, data] = body.photo.match(/^data:(image\/\w+);base64,(.+)$/)!;
+      try {
+        const out = await opts.tryOn({ mimeType: mime, data }, prompt);
+        res.setHeader("Cache-Control", "no-store");
+        res.json({ image: `data:${out.mimeType};base64,${out.data}` });
+      } catch (e) {
+        if (e instanceof TryOnError) return res.status(e.status).json({ error: e.message });
+        throw e;
+      }
     }),
   );
 

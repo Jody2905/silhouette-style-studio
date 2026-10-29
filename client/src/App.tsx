@@ -6,6 +6,7 @@ import { Guide } from "./views/Guide";
 import { Looks, Research, Trends } from "./views/More";
 import { Studio } from "./views/Studio";
 import { You } from "./views/You";
+import { loadPhoto } from "./photo/photoStore";
 import type { PhotoScene } from "./vision/analyse";
 
 const TABS = [
@@ -32,8 +33,38 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(tabFromHash() ?? (saved ? "studio" : "you"));
   const [outfit, setOutfit] = useState<Outfit>(() => local.get<Outfit | null>("outfit", null) ?? styleMe(saved ?? DEFAULT_PROFILE));
   const [faceImg, setFaceImg] = useState<string | null>(null);
-  // The analysed photo lives in memory only; it is never stored or uploaded.
+  // The photo is kept in this browser only (never uploaded) and re-analysed on load.
   const [scene, setScene] = useState<PhotoScene | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const blob = await loadPhoto();
+      if (!blob || cancelled) return;
+      const url = URL.createObjectURL(blob);
+      setPhotoUrl(url);
+      setRestoring(true);
+      try {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const { analysePhoto } = await import("./vision/analyse");
+        const r = await analysePhoto(img);
+        if (cancelled) return;
+        setScene(r.scene);
+        if (r.faceCrop) setFaceImg(r.faceCrop);
+      } catch {
+        /* models offline: the avatar is shown instead */
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [user, setUser] = useState<User | null>(null);
   const [looks, setLooks] = useState<SavedLook[]>([]);
   const [auth, setAuth] = useState<null | "signin" | "register">(null);
@@ -145,7 +176,7 @@ export default function App() {
       </header>
 
       <main>
-        {tab === "you" && <You profile={profile} setProfile={setProfile} faceImg={faceImg} setFaceImg={setFaceImg} onScene={setScene} onDone={() => go("studio")} />}
+        {tab === "you" && <You profile={profile} setProfile={setProfile} faceImg={faceImg} setFaceImg={setFaceImg} onScene={setScene} photo={photoUrl} setPhoto={setPhotoUrl} restoring={restoring} onDone={() => go("studio")} />}
         {tab === "studio" && (
           <Studio
             profile={profile}
@@ -153,7 +184,10 @@ export default function App() {
             setOutfit={setOutfit}
             faceImg={faceImg}
             scene={scene}
+            restoring={restoring}
             onAddPhoto={() => go("you")}
+            user={user}
+            onSignIn={() => setAuth("signin")}
             onSave={async (name) => setLooks(await store.add(name, outfit, scoreLook(profile, outfit).score))}
           />
         )}

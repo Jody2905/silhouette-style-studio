@@ -134,3 +134,18 @@ describe("guide and auto-styling", () => {
     expect(new Set(CATALOG.map((i) => i.id)).size).toBe(CATALOG.length);
   });
 });
+
+describe("describeLook (AI try-on prompt)", () => {
+  it("names garments, colours and what to keep", async () => {
+    const { describeLook, colourName, wear, DEFAULT_PROFILE } = await import("../src/index");
+    expect(colourName("#c19a6b")).toBe("camel");
+    const p = describeLook({ dress: wear("dress-shift", "#f2b632"), shoes: wear("shoes-sneakers") }, DEFAULT_PROFILE)!;
+    expect(p).toMatch(/shift dress in golden yellow/);
+    expect(p).toMatch(/short sleeves/);
+    expect(p).toMatch(/identical face/);
+    expect(p).not.toMatch(/current bottoms/);
+    const q = describeLook({ top: wear("top-tee") }, DEFAULT_PROFILE)!;
+    expect(q).toMatch(/Leave their current bottoms, their current footwear unchanged/);
+    expect(describeLook({}, DEFAULT_PROFILE)).toBeNull();
+  });
+});

@@ -3,8 +3,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app";
 import { openDb } from "./db";
+import { geminiTryOn } from "./tryon";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// Local settings (e.g. GEMINI_API_KEY) from a .env file in the project folder, if there is one.
+try {
+  process.loadEnvFile(path.resolve(here, "../../.env"));
+} catch {
+  /* no .env file: fine */
+}
 const isProd = process.env.NODE_ENV === "production";
 
 let secret = process.env.JWT_SECRET;
@@ -30,7 +37,11 @@ const app = createApp({
   jwtSecret: secret,
   secureCookies: isProd,
   clientDist: path.resolve(here, "../../client/dist"),
+  // AI try-on is switched on by setting GEMINI_API_KEY (from Google AI Studio).
+  tryOn: process.env.GEMINI_API_KEY ? geminiTryOn(process.env.GEMINI_API_KEY, process.env.GEMINI_IMAGE_MODEL || undefined) : undefined,
+  tryOnLimits: { perUser: Number(process.env.TRYON_PER_USER_DAILY ?? 15), global: Number(process.env.TRYON_DAILY_LIMIT ?? 200) },
 });
+console.log(process.env.GEMINI_API_KEY ? "AI try-on is on." : "AI try-on is off (set GEMINI_API_KEY to turn it on).");
 
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => console.log(`Silhouette listening on http://localhost:${port}`));

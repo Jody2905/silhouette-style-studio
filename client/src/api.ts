@@ -38,7 +38,15 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   return data as T;
 }
 
+export interface TryOnStatus {
+  enabled: boolean;
+  remaining: number;
+  perDay: number;
+}
+
 export const api = {
+  tryOnStatus: () => call<TryOnStatus>("GET", "/api/tryon"),
+  tryOn: (photo: string, outfit: Outfit) => call<{ image: string }>("POST", "/api/tryon", { photo, outfit }),
   me: () => call<{ user: User; profile: Profile | null }>("GET", "/api/auth/me"),
   register: (name: string, email: string, password: string) => call<{ user: User }>("POST", "/api/auth/register", { name, email, password }),
   login: (email: string, password: string) => call<{ user: User }>("POST", "/api/auth/login", { email, password }),

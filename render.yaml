@@ -17,3 +17,11 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
+      # AI try-on ("Make it real"): paste a Gemini API key from Google AI Studio. Leave empty to keep it off.
+      - key: GEMINI_API_KEY
+        sync: false
+      # Daily caps that limit spending: per user, and for the whole site.
+      - key: TRYON_PER_USER_DAILY
+        value: "15"
+      - key: TRYON_DAILY_LIMIT
+        value: "200"

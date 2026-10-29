@@ -4,7 +4,8 @@ import {
 import { useMemo, useState } from "react";
 import { Avatar } from "../avatar/Avatar";
 import { EvidenceBadge, Swatch } from "../components/common";
-import { PhotoTryOn } from "../photo/PhotoTryOn";
+import { AiTryOn } from "../photo/AiTryOn";
+import type { User } from "../api";
 import type { PhotoScene } from "../vision/analyse";
 
 function ScoreRing({ score, label }: { score: number; label: string }) {
@@ -30,7 +31,10 @@ export function Studio({
   setOutfit,
   faceImg,
   scene,
+  restoring,
   onAddPhoto,
+  user,
+  onSignIn,
   onSave,
 }: {
   profile: Profile;
@@ -38,7 +42,10 @@ export function Studio({
   setOutfit: (o: Outfit) => void;
   faceImg: string | null;
   scene: PhotoScene | null;
+  restoring?: boolean;
   onAddPhoto: () => void;
+  user: User | null;
+  onSignIn: () => void;
   onSave: (name: string) => Promise<void>;
 }) {
   const items = useMemo(() => catalogFor(profile.wardrobe), [profile.wardrobe]);
@@ -104,13 +111,15 @@ export function Studio({
           </div>
         </div>
         {scene ? (
-          <PhotoTryOn scene={scene} profile={profile} outfit={outfit} />
+          <AiTryOn scene={scene} profile={profile} outfit={outfit} user={user} onSignIn={onSignIn} />
+        ) : restoring ? (
+          <div className="photo-loading" role="status">Loading your photo…</div>
         ) : (
           <div className="avatar-wrap">
             <Avatar profile={profile} outfit={outfit} faceImg={faceImg} />
           </div>
         )}
-        {!scene && (
+        {!scene && !restoring && (
           <p className="muted small center">
             <button type="button" className="link" onClick={onAddPhoto}>Add a photo</button> to try looks on yourself instead of this drawing. It stays on your device.
           </p>

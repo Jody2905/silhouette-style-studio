@@ -5,6 +5,7 @@ import {
 import { useRef, useState } from "react";
 import { HAIR_HEX, SKIN_DEFAULT } from "../avatar/geometry";
 import { Chips, Section } from "../components/common";
+import { clearPhoto, savePhoto } from "../photo/photoStore";
 import type { PhotoAnalysis, PhotoScene } from "../vision/analyse";
 
 type MKey = keyof Profile["measurements"];
@@ -23,6 +24,9 @@ export function You({
   faceImg,
   setFaceImg,
   onScene,
+  photo,
+  setPhoto,
+  restoring,
   onDone,
 }: {
   profile: Profile;
@@ -30,10 +34,12 @@ export function You({
   faceImg: string | null;
   setFaceImg: (s: string | null) => void;
   onScene: (s: PhotoScene | null) => void;
+  photo: string | null;
+  setPhoto: (url: string | null) => void;
+  restoring: boolean;
   onDone: () => void;
 }) {
   const [units, setUnits] = useState<"cm" | "in">("cm");
-  const [photo, setPhoto] = useState<string | null>(null);
   const [status, setStatus] = useState<"" | "loading" | "done" | "error">("");
   const [result, setResult] = useState<PhotoAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +66,8 @@ export function You({
     setResult(null);
     const url = URL.createObjectURL(file);
     setPhoto(url);
+    onScene(null);
+    void savePhoto(file);
     setStatus("loading");
     // Wait for the <img> to load the file, then analyse it in this browser.
     await new Promise((r) => setTimeout(r, 30));
@@ -109,18 +117,34 @@ export function You({
     <div className="you">
       <Section
         title="Your photo"
-        sub="A front-facing, full-length photo in fitted clothes works best, with arms held slightly away from your body. The photo is analysed on this device and is never uploaded or saved."
+        sub="A front-facing, full-length photo in fitted clothes works best, with arms held slightly away from your body. The photo is analysed and kept on this device only (so it's still here next time) and is never uploaded. Remove it any time."
       >
         <div className="photo-row">
           <div className="photo-box">
             {photo ? <img ref={imgRef} src={photo} alt="Your uploaded photo" /> : <div className="photo-empty">No photo yet</div>}
-            {status === "loading" && <div className="photo-busy" role="status">{step}</div>}
+            {(status === "loading" || restoring) && <div className="photo-busy" role="status">{restoring ? "Loading your photo…" : step}</div>}
           </div>
           <div className="photo-side">
             <input ref={fileRef} id="photo" type="file" accept="image/*" hidden onChange={(e) => onFile(e.target.files?.[0])} />
             <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
               {photo ? "Choose another photo" : "Add a photo"}
             </button>
+            {photo && (
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  void clearPhoto();
+                  setPhoto(null);
+                  onScene(null);
+                  setFaceImg(null);
+                  setResult(null);
+                  setStatus("");
+                }}
+              >
+                Remove photo
+              </button>
+            )}
             {error && <p className="err">{error}</p>}
             {result && (
               <ul className="found">

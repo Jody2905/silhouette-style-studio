@@ -82,3 +82,53 @@ describe("profile and looks", () => {
     expect((await jo.get("/api/looks")).status).toBe(401);
   });
 });
+
+describe("AI try-on", () => {
+  const photo = "data:image/jpeg;base64," + Buffer.from("fake-jpeg").toString("base64");
+
+  it("is off without a key, and needs a session", async () => {
+    expect((await request(app).post("/api/tryon").set(H).send({ photo, outfit: look })).status).toBe(401);
+    const agent = await signedIn();
+    expect((await agent.get("/api/tryon").set(H)).body.enabled).toBe(false);
+    expect((await agent.post("/api/tryon").set(H).send({ photo, outfit: look })).status).toBe(503);
+  });
+
+  it("sends the photo and a description of the look, and enforces the daily limit", async () => {
+    const calls: { prompt: string; mime: string }[] = [];
+    app = createApp({
+      db: await openDb(":memory:"),
+      jwtSecret: "x".repeat(40),
+      rateLimit: false,
+      tryOnLimits: { perUser: 2, global: 10 },
+      tryOn: async (p, prompt) => {
+        calls.push({ prompt, mime: p.mimeType });
+        return { mimeType: "image/png", data: "AAAA" };
+      },
+    });
+    const agent = await signedIn();
+    const r = await agent.post("/api/tryon").set(H).send({ photo, outfit: look });
+    expect(r.status).toBe(200);
+    expect(r.body.image).toBe("data:image/png;base64,AAAA");
+    expect(calls[0].mime).toBe("image/jpeg");
+    expect(calls[0].prompt).toMatch(/boat-neck top/);
+    expect(calls[0].prompt).toMatch(/identical face/);
+    expect((await agent.post("/api/tryon").set(H).send({ photo: "data:text/html;base64,AAAA", outfit: look })).status).toBe(400);
+    expect((await agent.post("/api/tryon").set(H).send({ photo, outfit: {} })).status).toBe(400);
+    await agent.post("/api/tryon").set(H).send({ photo, outfit: look });
+    expect((await agent.get("/api/tryon").set(H)).body.remaining).toBe(0);
+    const limited = await agent.post("/api/tryon").set(H).send({ photo, outfit: look });
+    expect(limited.status).toBe(429);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("parses Gemini responses and explains refusals", async () => {
+    const { geminiTryOn } = await import("../src/tryon");
+    const fake = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+    const ok = geminiTryOn("k", "m", fake({ candidates: [{ content: { parts: [{ text: "hi" }, { inlineData: { mimeType: "image/png", data: "QQ==" } }] } }] }));
+    expect(await ok({ mimeType: "image/jpeg", data: "x" }, "p")).toEqual({ mimeType: "image/png", data: "QQ==" });
+    const blocked = geminiTryOn("k", "m", fake({ promptFeedback: { blockReason: "SAFETY" } }));
+    await expect(blocked({ mimeType: "image/jpeg", data: "x" }, "p")).rejects.toThrow(/declined/);
+    const bad = geminiTryOn("k", "m", fake({ error: { message: "API key not valid" } }, 400));
+    await expect(bad({ mimeType: "image/jpeg", data: "x" }, "p")).rejects.toThrow(/API key/);
+  });
+});
