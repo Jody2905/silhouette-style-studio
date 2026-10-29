@@ -1,0 +1,9 @@
+node_modules
+dist
+*.db
+*.db-*
+.env
+demo
+stride-data
+silhouette-data
+client/public/mediapipe

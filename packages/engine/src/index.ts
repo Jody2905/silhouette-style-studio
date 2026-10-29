@@ -1,0 +1,9 @@
+export * from "./types";
+export * from "./body";
+export * from "./face";
+export * from "./color";
+export * from "./catalog";
+export * from "./trends";
+export * from "./scoring";
+export * from "./sources";
+export { buildGuide, styleMe, type StyleGuide } from "./guide";

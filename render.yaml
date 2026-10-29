@@ -1,0 +1,19 @@
+# Render Blueprint: deploys Silhouette as one free web service.
+# Data lives in a hosted Postgres (e.g. Neon's free tier), set as DATABASE_URL when you create the service.
+services:
+  - type: web
+    name: silhouette
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
