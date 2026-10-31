@@ -42,12 +42,6 @@ npm test
 
 No database setup needed locally: a built-in Postgres (PGlite) stores data in `server/silhouette-data`.
 
-## Deploy for free (Render + Neon)
-
-1. Create a free Neon project and copy its `postgresql://…?sslmode=require` connection string.
-2. On Render choose **New → Blueprint**, pick this repo, and paste the string as `DATABASE_URL`.
-3. For the guest demo, set **Settings → Pages → Source: GitHub Actions**; `.github/workflows/pages.yml` publishes it on every push.
-
 ## Turn on AI try-on
 
 1. Create a key at [Google AI Studio](https://aistudio.google.com/apikey). Image generation is a paid feature, so add billing to the Google Cloud project behind the key (about US$0.04 per picture at the time of writing; check Google's current pricing).
